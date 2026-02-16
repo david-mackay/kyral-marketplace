@@ -32,9 +32,13 @@ export default function MarketplaceDetailPage() {
   const [purchasing, setPurchasing] = useState(false);
   const [purchaseError, setPurchaseError] = useState<string | null>(null);
   const [purchased, setPurchased] = useState(false);
+  const [myListings, setMyListings] = useState<{ id: string; title: string; category: string }[]>([]);
+  const [contributing, setContributing] = useState<string | null>(null);
+  const [contributeError, setContributeError] = useState<string | null>(null);
 
   const loadData = useCallback(async () => {
     setLoading(true);
+    setContributeError(null);
     try {
       const endpoint =
         type === "dataset" ? `/api/datasets/${id}` : `/api/listings/${id}`;
@@ -43,9 +47,30 @@ export default function MarketplaceDetailPage() {
       if (type === "dataset") {
         setData(json.dataset);
         setContributions(json.contributions ?? []);
+        // Load user's listings for the contribute section
+        const listingsRes = await fetch("/api/listings?mine=true", {
+          cache: "no-store",
+        });
+        const listingsData = await listingsRes.json();
+        const contributionsList = json.contributions ?? [];
+        const contributedIds = new Set(
+          contributionsList.map((c: { listingId?: string }) => c.listingId)
+        );
+        const available = (listingsData.listings ?? [])
+          .filter(
+            (l: { id: string; status: string }) =>
+              l.status === "active" && !contributedIds.has(l.id)
+          )
+          .map((l: { id: string; title: string; category: string }) => ({
+            id: l.id,
+            title: l.title,
+            category: l.category,
+          }));
+        setMyListings(available);
       } else {
         setData(json.listing);
         setContributions(json.contributions ?? []);
+        setMyListings([]);
       }
     } catch (error) {
       console.error("Failed to load detail", error);
@@ -161,6 +186,32 @@ export default function MarketplaceDetailPage() {
       setPurchasing(false);
     }
   }, [data, id, type, user?.walletAddress, connection, walletProvider]);
+
+  const handleContribute = useCallback(
+    async (listingId: string) => {
+      setContributing(listingId);
+      setContributeError(null);
+      try {
+        const res = await fetch(`/api/datasets/${id}/contribute`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ listingId }),
+        });
+        if (!res.ok) {
+          const err = await res.json();
+          throw new Error(err.error ?? "Failed to contribute");
+        }
+        await loadData();
+      } catch (error) {
+        setContributeError(
+          error instanceof Error ? error.message : "Failed to contribute"
+        );
+      } finally {
+        setContributing(null);
+      }
+    },
+    [id, loadData]
+  );
 
   if (loading) {
     return (
@@ -336,6 +387,68 @@ export default function MarketplaceDetailPage() {
                 </div>
               ))}
             </div>
+          </div>
+        )}
+
+        {/* Contribute to dataset - always visible for open datasets */}
+        {type === "dataset" && (data.status as string) === "open" && (
+          <div className="rounded-xl border border-blue-500/20 bg-blue-500/5 p-5">
+            <h2 className="text-sm font-semibold text-zinc-200 mb-1">
+              Contribute your data
+            </h2>
+            <p className="text-xs text-zinc-500 mb-4">
+              Add one of your listings to this dataset. You&apos;ll receive a
+              share of revenue when it&apos;s purchased.
+            </p>
+            {contributeError && (
+              <div className="rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-2 text-sm text-red-400 mb-4">
+                {contributeError}
+              </div>
+            )}
+            {myListings.length > 0 ? (
+              <div className="space-y-2">
+                {myListings.map((listing) => (
+                  <div
+                    key={listing.id}
+                    className="flex items-center justify-between px-4 py-3 rounded-lg border border-zinc-800 bg-zinc-900/50 hover:border-zinc-700"
+                  >
+                    <div className="min-w-0">
+                      <div className="text-sm text-zinc-200 truncate">
+                        {listing.title}
+                      </div>
+                      <div className="text-xs text-zinc-500">
+                        {CATEGORY_LABELS[listing.category] ?? listing.category}
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => void handleContribute(listing.id)}
+                      disabled={contributing !== null}
+                      className="px-4 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-medium transition-colors disabled:opacity-50 shrink-0 inline-flex items-center gap-1"
+                    >
+                      {contributing === listing.id ? (
+                        <>
+                          Adding <LoadingDots />
+                        </>
+                      ) : (
+                        "Add"
+                      )}
+                    </button>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="rounded-lg border border-dashed border-zinc-700 bg-zinc-900/30 px-4 py-4 text-center">
+                <p className="text-sm text-zinc-500 mb-2">
+                  You need an active listing to contribute.
+                </p>
+                <Link
+                  href="/upload"
+                  className="text-sm text-emerald-400 hover:text-emerald-300 font-medium"
+                >
+                  Upload data & create a listing →
+                </Link>
+              </div>
+            )}
           </div>
         )}
 

@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { LoadingDots } from "@/components/LoadingDots";
 import { formatUsdc, formatDate } from "@/lib/format";
 
@@ -17,6 +18,7 @@ type Purchase = {
 };
 
 export default function PurchasesPage() {
+  const router = useRouter();
   const [purchases, setPurchases] = useState<Purchase[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -71,10 +73,13 @@ export default function PurchasesPage() {
       ) : (
         <div className="rounded-xl border border-zinc-800 bg-zinc-900/50 divide-y divide-zinc-800">
           {purchases.map((p) => (
-            <Link
+            <div
               key={p.id}
-              href={`/purchases/${p.id}`}
-              className="flex items-center justify-between px-5 py-4 hover:bg-zinc-800/30 transition-colors"
+              role="button"
+              tabIndex={0}
+              onClick={() => router.push(`/purchases/${p.id}`)}
+              onKeyDown={(e) => e.key === "Enter" && router.push(`/purchases/${p.id}`)}
+              className="flex items-center justify-between px-5 py-4 hover:bg-zinc-800/30 transition-colors gap-4 cursor-pointer"
             >
               <div className="min-w-0 flex-1">
                 <div className="text-sm font-medium text-zinc-200 truncate">
@@ -87,26 +92,26 @@ export default function PurchasesPage() {
                   <span className="text-xs px-1.5 py-0.5 rounded bg-zinc-800 text-zinc-400">
                     {p.targetType === "dataset" ? "Dataset" : "Listing"}
                   </span>
-                  {p.txSignature && (
-                    <a
-                      href={`https://solscan.io/tx/${p.txSignature}`}
-                      target="_blank"
-                      rel="noreferrer"
-                      onClick={(e) => e.stopPropagation()}
-                      className="text-xs text-emerald-500/70 hover:text-emerald-400"
-                    >
-                      View tx
-                    </a>
-                  )}
                 </div>
               </div>
-              <div className="flex items-center gap-4 shrink-0">
+              <div className="flex items-center gap-2 shrink-0">
+                {p.txSignature && (
+                  <a
+                    href={`https://solscan.io/tx/${p.txSignature}`}
+                    target="_blank"
+                    rel="noreferrer"
+                    onClick={(e) => e.stopPropagation()}
+                    className="text-xs text-emerald-500/70 hover:text-emerald-400"
+                  >
+                    View tx
+                  </a>
+                )}
                 <span className="text-sm text-zinc-400">
                   {formatUsdc(p.amountUsdc)} USDC
                 </span>
                 <span className="text-zinc-500">→</span>
               </div>
-            </Link>
+            </div>
           ))}
         </div>
       )}

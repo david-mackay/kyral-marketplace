@@ -7,6 +7,7 @@ import { useWalletAuth } from "@/hooks/useWalletAuth";
 const navLinks = [
   { href: "/marketplace", label: "Marketplace" },
   { href: "/dashboard", label: "Dashboard" },
+  { href: "/purchases", label: "Purchases" },
   { href: "/upload", label: "Upload" },
   { href: "/datasets/create", label: "Create Dataset" },
   { href: "/earnings", label: "Earnings" },

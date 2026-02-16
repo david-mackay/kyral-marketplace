@@ -10,9 +10,8 @@ import {
   datasets,
   datasetContributions,
   revenueEvents,
-  users,
 } from "@/server/db/schema";
-import { verifyUsdcTransfer, sendUsdcFromEscrow } from "@/server/solana/usdc";
+import { verifyUsdcTransfer } from "@/server/solana/usdc";
 import { getPlatformFeeBps } from "@/server/solana/config";
 
 export const runtime = "nodejs";
@@ -44,7 +43,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Verify the transaction on-chain
+    // Verify the transaction on-chain (waits for confirmation)
     const verification = await verifyUsdcTransfer({
       txSignature,
       expectedFromWallet: user.walletAddress,
@@ -69,8 +68,13 @@ export async function POST(req: NextRequest) {
       .set({ status: "confirmed", txSignature })
       .where(eq(purchases.id, purchaseId));
 
-    // Distribute revenue
-    await distributeRevenue(purchase.id, purchase.targetType, purchase.targetId, purchase.amountUsdc);
+    // Record entitlements (no immediate payout — contributors withdraw on their own)
+    await recordEntitlements(
+      purchase.id,
+      purchase.targetType,
+      purchase.targetId,
+      purchase.amountUsdc
+    );
 
     return NextResponse.json({ ok: true, purchaseId });
   } catch (error) {
@@ -92,9 +96,11 @@ export async function POST(req: NextRequest) {
 }
 
 /**
- * Distribute revenue from a purchase to contributors.
+ * Record revenue entitlements for contributors.
+ * Revenue events are created with status "pending" (claimable).
+ * Contributors withdraw funds themselves via /api/withdrawals.
  */
-async function distributeRevenue(
+async function recordEntitlements(
   purchaseId: string,
   targetType: string,
   targetId: string,
@@ -105,49 +111,17 @@ async function distributeRevenue(
   const distributableAmount = amountUsdc - platformFee;
 
   if (targetType === "listing") {
-    // Single listing: entire amount goes to the owner
     const listing = await db.query.dataListings.findFirst({
       where: eq(dataListings.id, targetId),
     });
-
     if (!listing) return;
 
-    const owner = await db.query.users.findFirst({
-      where: eq(users.id, listing.ownerUserId),
+    await db.insert(revenueEvents).values({
+      purchaseId,
+      recipientUserId: listing.ownerUserId,
+      amountUsdc: distributableAmount,
+      status: "pending",
     });
-
-    if (!owner) return;
-
-    // Create revenue event
-    const event = await db
-      .insert(revenueEvents)
-      .values({
-        purchaseId,
-        recipientUserId: owner.id,
-        amountUsdc: distributableAmount,
-        status: "pending",
-      })
-      .returning()
-      .then((rows) => rows[0]);
-
-    // Send USDC from escrow
-    try {
-      const txSig = await sendUsdcFromEscrow({
-        recipientWallet: owner.walletAddress,
-        amountSmallestUnit: distributableAmount,
-      });
-
-      await db
-        .update(revenueEvents)
-        .set({ status: "confirmed", txSignature: txSig })
-        .where(eq(revenueEvents.id, event!.id));
-    } catch (error) {
-      console.error("Revenue distribution failed for listing", error);
-      await db
-        .update(revenueEvents)
-        .set({ status: "failed" })
-        .where(eq(revenueEvents.id, event!.id));
-    }
   } else {
     // Dataset: split among contributors
     const contributions = await db.query.datasetContributions.findMany({
@@ -155,92 +129,33 @@ async function distributeRevenue(
     });
 
     if (contributions.length === 0) {
-      // No contributions yet -- send to the dataset creator
+      // No contributions — entitlement goes to the dataset creator
       const dataset = await db.query.datasets.findFirst({
         where: eq(datasets.id, targetId),
       });
       if (!dataset) return;
 
-      const creator = await db.query.users.findFirst({
-        where: eq(users.id, dataset.creatorUserId),
+      await db.insert(revenueEvents).values({
+        purchaseId,
+        recipientUserId: dataset.creatorUserId,
+        amountUsdc: distributableAmount,
+        status: "pending",
       });
-      if (!creator) return;
-
-      const event = await db
-        .insert(revenueEvents)
-        .values({
-          purchaseId,
-          recipientUserId: creator.id,
-          amountUsdc: distributableAmount,
-          status: "pending",
-        })
-        .returning()
-        .then((rows) => rows[0]);
-
-      try {
-        const txSig = await sendUsdcFromEscrow({
-          recipientWallet: creator.walletAddress,
-          amountSmallestUnit: distributableAmount,
-        });
-
-        await db
-          .update(revenueEvents)
-          .set({ status: "confirmed", txSignature: txSig })
-          .where(eq(revenueEvents.id, event!.id));
-      } catch (error) {
-        console.error("Revenue distribution failed for dataset creator", error);
-        await db
-          .update(revenueEvents)
-          .set({ status: "failed" })
-          .where(eq(revenueEvents.id, event!.id));
-      }
       return;
     }
 
     // Equal split among all contributors
-    const totalContributions = contributions.length;
     const perContributorAmount = Math.floor(
-      distributableAmount / totalContributions
+      distributableAmount / contributions.length
     );
 
     for (const contribution of contributions) {
-      const contributor = await db.query.users.findFirst({
-        where: eq(users.id, contribution.contributorUserId),
+      await db.insert(revenueEvents).values({
+        purchaseId,
+        recipientUserId: contribution.contributorUserId,
+        amountUsdc: perContributorAmount,
+        status: "pending",
       });
-
-      if (!contributor) continue;
-
-      const event = await db
-        .insert(revenueEvents)
-        .values({
-          purchaseId,
-          recipientUserId: contributor.id,
-          amountUsdc: perContributorAmount,
-          status: "pending",
-        })
-        .returning()
-        .then((rows) => rows[0]);
-
-      try {
-        const txSig = await sendUsdcFromEscrow({
-          recipientWallet: contributor.walletAddress,
-          amountSmallestUnit: perContributorAmount,
-        });
-
-        await db
-          .update(revenueEvents)
-          .set({ status: "confirmed", txSignature: txSig })
-          .where(eq(revenueEvents.id, event!.id));
-      } catch (error) {
-        console.error(
-          `Revenue distribution failed for contributor ${contributor.id}`,
-          error
-        );
-        await db
-          .update(revenueEvents)
-          .set({ status: "failed" })
-          .where(eq(revenueEvents.id, event!.id));
-      }
     }
   }
 }

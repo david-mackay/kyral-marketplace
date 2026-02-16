@@ -30,6 +30,7 @@ type PurchaseRow = {
   id: string;
   targetType: string;
   targetId: string;
+  title?: string;
   amountUsdc: number;
   txSignature: string | null;
   status: string;
@@ -37,8 +38,8 @@ type PurchaseRow = {
 };
 
 type EarningsSummary = {
-  totalEarned: number;
-  totalPending: number;
+  availableBalance: number;
+  totalWithdrawn: number;
   totalEvents: number;
 };
 
@@ -70,8 +71,8 @@ export default function DashboardPage() {
       setDatasets(datasetsData.datasets ?? []);
       setPurchases(purchasesData.purchases ?? []);
       setEarnings({
-        totalEarned: earningsData.totalEarned ?? 0,
-        totalPending: earningsData.totalPending ?? 0,
+        availableBalance: earningsData.availableBalance ?? 0,
+        totalWithdrawn: earningsData.totalWithdrawn ?? 0,
         totalEvents: earningsData.totalEvents ?? 0,
       });
     } catch (error) {
@@ -126,13 +127,13 @@ export default function DashboardPage() {
       {/* Stats */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <StatCard
-          label="Total Earned"
-          value={formatUsdc(earnings?.totalEarned ?? 0)}
+          label="Available to Withdraw"
+          value={formatUsdc(earnings?.availableBalance ?? 0)}
           color="emerald"
         />
         <StatCard
-          label="Pending"
-          value={formatUsdc(earnings?.totalPending ?? 0)}
+          label="Total Withdrawn"
+          value={formatUsdc(earnings?.totalWithdrawn ?? 0)}
           color="amber"
         />
         <StatCard
@@ -146,6 +147,26 @@ export default function DashboardPage() {
           color="purple"
         />
       </div>
+
+      {/* Withdraw CTA */}
+      {(earnings?.availableBalance ?? 0) > 0 && (
+        <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/5 px-5 py-4 flex items-center justify-between">
+          <div>
+            <div className="text-sm font-medium text-zinc-200">
+              You have {formatUsdc(earnings?.availableBalance ?? 0)} USDC available
+            </div>
+            <div className="text-xs text-zinc-500 mt-0.5">
+              Head to Earnings to withdraw to your wallet
+            </div>
+          </div>
+          <Link
+            href="/earnings"
+            className="px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-medium transition-colors"
+          >
+            Withdraw
+          </Link>
+        </div>
+      )}
 
       {/* My Listings */}
       <section>
@@ -255,22 +276,32 @@ export default function DashboardPage() {
 
       {/* Recent Purchases */}
       <section>
-        <h2 className="text-lg font-semibold text-zinc-200 mb-4">
-          Recent Purchases
-        </h2>
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-lg font-semibold text-zinc-200">
+            Recent Purchases
+          </h2>
+          {purchases.length > 0 && (
+            <Link
+              href="/purchases"
+              className="text-sm text-emerald-400 hover:underline"
+            >
+              View all
+            </Link>
+          )}
+        </div>
         {purchases.length === 0 ? (
           <EmptyState text="No purchases yet. Browse the marketplace to find data." />
         ) : (
           <div className="rounded-xl border border-zinc-800 bg-zinc-900/50 divide-y divide-zinc-800">
-            {purchases.slice(0, 10).map((p) => (
-              <div
+            {purchases.slice(0, 5).map((p) => (
+              <Link
                 key={p.id}
-                className="flex items-center justify-between px-5 py-4"
+                href={`/purchases/${p.id}`}
+                className="flex items-center justify-between px-5 py-4 hover:bg-zinc-800/30 transition-colors"
               >
-                <div>
-                  <div className="text-sm text-zinc-200">
-                    {p.targetType === "dataset" ? "Dataset" : "Listing"}{" "}
-                    purchase
+                <div className="min-w-0 flex-1">
+                  <div className="text-sm text-zinc-200 truncate">
+                    {p.title ?? `${p.targetType === "dataset" ? "Dataset" : "Listing"} purchase`}
                   </div>
                   <div className="text-xs text-zinc-600">
                     {new Date(p.createdAt).toLocaleDateString()}
@@ -281,7 +312,7 @@ export default function DashboardPage() {
                     )}
                   </div>
                 </div>
-                <div className="flex items-center gap-3">
+                <div className="flex items-center gap-3 shrink-0">
                   <span
                     className={[
                       "text-xs px-2 py-0.5 rounded-md",
@@ -297,8 +328,9 @@ export default function DashboardPage() {
                   <span className="text-sm text-zinc-300">
                     {formatUsdc(p.amountUsdc)}
                   </span>
+                  <span className="text-zinc-500">→</span>
                 </div>
-              </div>
+              </Link>
             ))}
           </div>
         )}

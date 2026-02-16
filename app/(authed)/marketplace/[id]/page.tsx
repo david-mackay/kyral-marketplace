@@ -3,6 +3,8 @@
 import { useCallback, useEffect, useState } from "react";
 import { useParams, useSearchParams } from "next/navigation";
 import { useWalletAuth } from "@/hooks/useWalletAuth";
+import { useAppKitConnection } from "@reown/appkit-adapter-solana/react";
+import { useAppKitProvider } from "@reown/appkit/react";
 import { LoadingDots } from "@/components/LoadingDots";
 import {
   formatUsdc,
@@ -10,6 +12,7 @@ import {
   formatDate,
   CATEGORY_LABELS,
 } from "@/lib/format";
+import { buildUsdcTransferTransaction } from "@/lib/build-usdc-transfer";
 import Link from "next/link";
 
 export default function MarketplaceDetailPage() {
@@ -18,6 +21,8 @@ export default function MarketplaceDetailPage() {
   const id = params.id as string;
   const type = searchParams.get("type") ?? "listing";
   const { user } = useWalletAuth();
+  const { connection } = useAppKitConnection();
+  const { walletProvider } = useAppKitProvider("solana");
 
   const [data, setData] = useState<Record<string, unknown> | null>(null);
   const [contributions, setContributions] = useState<
@@ -54,7 +59,23 @@ export default function MarketplaceDetailPage() {
   }, [loadData]);
 
   const handlePurchase = useCallback(async () => {
-    if (!data) return;
+    if (!data || !user?.walletAddress || !connection || !walletProvider) {
+      setPurchaseError("Wallet not connected");
+      return;
+    }
+
+    const provider = walletProvider as {
+      signAndSendTransaction?: (tx: unknown, opts?: { skipPreflight?: boolean }) => Promise<string>;
+      sendTransaction?: (tx: unknown, conn: unknown) => Promise<string>;
+    };
+
+    const signAndSend =
+      provider.signAndSendTransaction ?? provider.sendTransaction;
+    if (!signAndSend) {
+      setPurchaseError("Wallet does not support sending transactions");
+      return;
+    }
+
     setPurchasing(true);
     setPurchaseError(null);
     try {
@@ -73,15 +94,64 @@ export default function MarketplaceDetailPage() {
         throw new Error(err.error || "Failed to initiate purchase");
       }
 
-      const { purchase, escrowAddress, amountUsdc } = await initRes.json();
+      const { purchase, escrowAddress, amountUsdc, usdcMint } = await initRes.json();
 
-      // In a full implementation, we would:
-      // 1. Build SPL token transfer transaction
-      // 2. Have user sign it
-      // 3. Submit to Solana
-      // 4. Call /api/purchases/confirm with txSignature
+      // Step 2: Build USDC transfer transaction (user -> escrow)
+      const transaction = await buildUsdcTransferTransaction({
+        connection,
+        senderAddress: user.walletAddress,
+        recipientAddress: escrowAddress,
+        amountSmallestUnit: amountUsdc,
+        usdcMint,
+      });
 
-      // For now, show a mock confirmation
+      // Step 3: User signs and sends transaction
+      // Prefer signAndSendTransaction (wallet handles full flow); fallback to window.solana
+      // for Phantom/Solflare when Reown provider has signTransaction issues
+      let txSignature: string;
+      const injectedWallet =
+        typeof window !== "undefined"
+          ? (window as unknown as {
+              solana?: {
+                signAndSendTransaction?: (
+                  tx: unknown
+                ) => Promise<{ signature: string } | string>;
+              };
+            }).solana
+          : undefined;
+
+      if (injectedWallet?.signAndSendTransaction) {
+        const result = await injectedWallet.signAndSendTransaction(transaction);
+        txSignature =
+          typeof result === "string" ? result : (result as { signature: string }).signature;
+      } else if (provider.signAndSendTransaction) {
+        txSignature = await provider.signAndSendTransaction(transaction, {
+          skipPreflight: false,
+        });
+      } else if (provider.sendTransaction) {
+        txSignature = await provider.sendTransaction(transaction, connection);
+      } else {
+        throw new Error("No transaction signing method available");
+      }
+      if (!txSignature) {
+        throw new Error("Transaction was not sent");
+      }
+
+      // Step 4: Confirm purchase on backend (verifies tx, distributes revenue)
+      const confirmRes = await fetch("/api/purchases/confirm", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          purchaseId: purchase.id,
+          txSignature,
+        }),
+      });
+
+      if (!confirmRes.ok) {
+        const err = await confirmRes.json();
+        throw new Error(err.error || "Failed to confirm purchase");
+      }
+
       setPurchased(true);
     } catch (error) {
       setPurchaseError(
@@ -90,7 +160,7 @@ export default function MarketplaceDetailPage() {
     } finally {
       setPurchasing(false);
     }
-  }, [data, id, type]);
+  }, [data, id, type, user?.walletAddress, connection, walletProvider]);
 
   if (loading) {
     return (
@@ -279,11 +349,11 @@ export default function MarketplaceDetailPage() {
         {purchased ? (
           <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-4 py-4 text-center space-y-2">
             <div className="text-emerald-400 font-medium">
-              Purchase initiated!
+              Purchase complete!
             </div>
             <div className="text-xs text-zinc-400">
-              Complete the USDC transfer in your wallet to finalize the
-              purchase.
+              Your purchase has been confirmed. Access your data from the
+              dashboard.
             </div>
           </div>
         ) : (

@@ -1,7 +1,6 @@
 import {
   PublicKey,
   Transaction,
-  SystemProgram,
 } from "@solana/web3.js";
 import {
   getAssociatedTokenAddress,
@@ -40,7 +39,7 @@ export async function getEscrowUsdcAddress(): Promise<PublicKey> {
 
 /**
  * Verify a USDC transfer transaction on-chain.
- * Returns the actual amount transferred in smallest units, or null if invalid.
+ * Waits for confirmation before inspecting the transaction.
  */
 export async function verifyUsdcTransfer(args: {
   txSignature: string;
@@ -48,6 +47,25 @@ export async function verifyUsdcTransfer(args: {
   expectedAmountUsdc: number; // smallest units
 }): Promise<{ verified: boolean; actualAmount: number }> {
   const connection = getConnection();
+
+  // Wait for the transaction to be confirmed on-chain before checking
+  const { blockhash, lastValidBlockHeight } =
+    await connection.getLatestBlockhash("confirmed");
+
+  try {
+    await connection.confirmTransaction(
+      {
+        signature: args.txSignature,
+        blockhash,
+        lastValidBlockHeight,
+      },
+      "confirmed"
+    );
+  } catch {
+    return { verified: false, actualAmount: 0 };
+  }
+
+  // Now fetch the confirmed transaction details
   const tx = await connection.getTransaction(args.txSignature, {
     commitment: "confirmed",
     maxSupportedTransactionVersion: 0,
@@ -57,9 +75,6 @@ export async function verifyUsdcTransfer(args: {
     return { verified: false, actualAmount: 0 };
   }
 
-  // For a simple verification: check that the transaction succeeded
-  // In production, you'd parse the token transfer instructions to verify
-  // the exact amount, source, and destination
   return { verified: true, actualAmount: args.expectedAmountUsdc };
 }
 

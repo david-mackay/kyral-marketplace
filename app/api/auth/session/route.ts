@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 
 import {
-  getAuthenticatedUser,
+  getAuthenticatedUserWithDb,
+  getOrCreateUser,
   createSessionToken,
   setSessionCookie,
 } from "@/server/auth/session";
@@ -10,7 +11,7 @@ import { verifySolanaAuthSignature } from "@/server/auth/verify-signature";
 export const runtime = "nodejs";
 
 export async function GET() {
-  const user = await getAuthenticatedUser();
+  const user = await getAuthenticatedUserWithDb();
   if (!user) {
     return NextResponse.json({ authenticated: false }, { status: 200 });
   }
@@ -61,10 +62,19 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    // Get or create DB user so we return a proper UUID id
+    const dbUser = await getOrCreateUser(verifiedAddress);
+    if (!dbUser) {
+      return NextResponse.json(
+        { error: "Failed to create user account" },
+        { status: 500 }
+      );
+    }
+
     const token = createSessionToken(verifiedAddress);
     const response = NextResponse.json({
       ok: true,
-      user: { id: verifiedAddress, walletAddress: verifiedAddress },
+      user: { id: dbUser.id, walletAddress: dbUser.walletAddress },
     });
     setSessionCookie(response, token);
 

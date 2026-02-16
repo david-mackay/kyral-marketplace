@@ -35,7 +35,7 @@ export default function HomePage() {
                 href="/auth"
                 className="inline-flex items-center justify-center px-6 py-3 rounded-xl border border-zinc-700 hover:border-zinc-600 text-zinc-300 hover:text-zinc-100 font-medium text-sm transition-colors"
               >
-                Connect Wallet
+                Sign In
               </Link>
             </div>
           </div>

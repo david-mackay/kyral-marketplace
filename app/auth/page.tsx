@@ -7,7 +7,7 @@ import { LoadingDots } from "@/components/LoadingDots";
 
 export default function AuthPage() {
   const router = useRouter();
-  const { status, isAuthenticated, error } = useWalletAuth();
+  const { status, isAuthenticated, error, authenticate } = useWalletAuth();
 
   useEffect(() => {
     if (isAuthenticated) {
@@ -55,6 +55,12 @@ export default function AuthPage() {
               {error && (
                 <div className="rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-400">
                   {error}
+                  <button
+                    onClick={() => void authenticate()}
+                    className="ml-2 underline hover:text-red-300"
+                  >
+                    Try again
+                  </button>
                 </div>
               )}
 

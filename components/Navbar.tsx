@@ -73,12 +73,14 @@ export function Navbar() {
                 </button>
               </div>
             ) : (
-              <Link
-                href="/auth"
-                className="px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-medium transition-colors"
-              >
-                Connect Wallet
-              </Link>
+              pathname !== "/auth" && (
+                <Link
+                  href="/auth"
+                  className="px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-medium transition-colors"
+                >
+                  Sign In
+                </Link>
+              )
             )}
           </div>
         </div>

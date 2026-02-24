@@ -4,7 +4,12 @@ import { z } from "zod";
 
 import { requireAuthenticatedUser } from "@/server/auth/session";
 import { db } from "@/server/db";
-import { dataListings, datasets, purchases } from "@/server/db/schema";
+import {
+  dataListings,
+  datasets,
+  datasetContributions,
+  purchases,
+} from "@/server/db/schema";
 import { getEscrowKeypair, getUsdcMint } from "@/server/solana/config";
 
 export const runtime = "nodejs";
@@ -55,6 +60,17 @@ export async function POST(req: NextRequest) {
           { status: 400 }
         );
       }
+
+      const contributions = await db.query.datasetContributions.findMany({
+        where: eq(datasetContributions.datasetId, targetId),
+      });
+      if (contributions.length === 0) {
+        return NextResponse.json(
+          { error: "This dataset has no contributions yet" },
+          { status: 400 }
+        );
+      }
+
       amountUsdc = dataset.priceUsdc;
     }
 

@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { useParams, useSearchParams } from "next/navigation";
+import { useParams, useSearchParams, useRouter } from "next/navigation";
 import { useWalletAuth } from "@/hooks/useWalletAuth";
 import { useAppKitConnection } from "@reown/appkit-adapter-solana/react";
 import { useAppKitProvider } from "@reown/appkit/react";
@@ -16,6 +16,7 @@ import { buildUsdcTransferTransaction } from "@/lib/build-usdc-transfer";
 import Link from "next/link";
 
 export default function MarketplaceDetailPage() {
+  const router = useRouter();
   const params = useParams();
   const searchParams = useSearchParams();
   const id = params.id as string;
@@ -35,6 +36,7 @@ export default function MarketplaceDetailPage() {
   const [myListings, setMyListings] = useState<{ id: string; title: string; category: string }[]>([]);
   const [contributing, setContributing] = useState<string | null>(null);
   const [contributeError, setContributeError] = useState<string | null>(null);
+  const [deleteLoading, setDeleteLoading] = useState(false);
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -212,6 +214,27 @@ export default function MarketplaceDetailPage() {
     },
     [id, loadData]
   );
+
+  const handleDelete = useCallback(async () => {
+    const label = type === "dataset" ? "dataset" : "listing";
+    if (!confirm(`Delete this ${label}? This cannot be undone.`)) return;
+    setDeleteLoading(true);
+    try {
+      const endpoint =
+        type === "dataset" ? `/api/datasets/${id}` : `/api/listings/${id}`;
+      const res = await fetch(endpoint, { method: "DELETE" });
+      if (!res.ok) {
+        const err = await res.json();
+        alert(err.error || "Failed to delete");
+        return;
+      }
+      router.push("/dashboard");
+    } catch {
+      alert("Failed to delete");
+    } finally {
+      setDeleteLoading(false);
+    }
+  }, [id, type, router]);
 
   if (loading) {
     return (
@@ -397,8 +420,8 @@ export default function MarketplaceDetailPage() {
               Contribute your data
             </h2>
             <p className="text-xs text-zinc-500 mb-4">
-              Add one of your listings to this dataset. You&apos;ll receive a
-              share of revenue when it&apos;s purchased.
+              Add one of your listings to this dataset. Revenue is split
+              equally among all contributors when the dataset is purchased.
             </p>
             {contributeError && (
               <div className="rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-2 text-sm text-red-400 mb-4">
@@ -469,8 +492,17 @@ export default function MarketplaceDetailPage() {
               dashboard.
             </div>
           </div>
-        ) : (
-          !isOwner && (
+        ) : !isOwner ? (
+          type === "dataset" && totalContributions === 0 ? (
+            <div className="rounded-lg border border-zinc-700 bg-zinc-800/50 px-4 py-4 text-center">
+              <div className="text-sm text-zinc-400">
+                This dataset has no contributions yet and cannot be purchased.
+              </div>
+              <div className="text-xs text-zinc-600 mt-1">
+                Contribute your data to help build this dataset.
+              </div>
+            </div>
+          ) : (
             <button
               onClick={() => void handlePurchase()}
               disabled={purchasing}
@@ -485,11 +517,26 @@ export default function MarketplaceDetailPage() {
               )}
             </button>
           )
-        )}
+        ) : null}
 
         {isOwner && (
-          <div className="text-center text-xs text-zinc-500 py-2">
-            This is your {type}. You cannot purchase your own data.
+          <div className="space-y-3">
+            <div className="text-center text-xs text-zinc-500 py-2">
+              This is your {type}. You cannot purchase your own data.
+            </div>
+            <button
+              onClick={() => void handleDelete()}
+              disabled={deleteLoading}
+              className="w-full py-2.5 rounded-xl border border-red-500/30 text-red-400 hover:bg-red-500/10 text-sm font-medium transition-colors disabled:opacity-50"
+            >
+              {deleteLoading ? (
+                <span className="inline-flex items-center gap-2">
+                  Deleting <LoadingDots />
+                </span>
+              ) : (
+                `Delete ${type === "dataset" ? "Dataset" : "Listing"}`
+              )}
+            </button>
           </div>
         )}
       </div>

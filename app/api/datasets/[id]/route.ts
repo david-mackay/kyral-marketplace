@@ -1,12 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
-import { eq } from "drizzle-orm";
+import { eq, and } from "drizzle-orm";
 
+import { requireAuthenticatedUser } from "@/server/auth/session";
 import { db } from "@/server/db";
 import {
   datasets,
   users,
   datasetContributions,
   dataListings,
+  purchases,
 } from "@/server/db/schema";
 
 export const runtime = "nodejs";
@@ -68,6 +70,58 @@ export async function GET(
     return NextResponse.json({ dataset, contributions });
   } catch (error) {
     console.error("/api/datasets/[id] GET error", error);
+    return NextResponse.json(
+      { error: "Internal server error" },
+      { status: 500 }
+    );
+  }
+}
+
+export async function DELETE(
+  _req: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const user = await requireAuthenticatedUser();
+    const { id } = await params;
+
+    const existing = await db.query.datasets.findFirst({
+      where: and(
+        eq(datasets.id, id),
+        eq(datasets.creatorUserId, user.id)
+      ),
+    });
+
+    if (!existing) {
+      return NextResponse.json(
+        { error: "Not found or not owned by you" },
+        { status: 404 }
+      );
+    }
+
+    const confirmedPurchase = await db.query.purchases.findFirst({
+      where: and(
+        eq(purchases.targetType, "dataset"),
+        eq(purchases.targetId, id),
+        eq(purchases.status, "confirmed")
+      ),
+    });
+
+    if (confirmedPurchase) {
+      return NextResponse.json(
+        { error: "Cannot delete a dataset that has been purchased" },
+        { status: 400 }
+      );
+    }
+
+    await db.delete(datasets).where(eq(datasets.id, id));
+
+    return NextResponse.json({ ok: true });
+  } catch (error) {
+    if (error instanceof Error && error.message === "UNAUTHENTICATED") {
+      return NextResponse.json({ error: "Unauthenticated" }, { status: 401 });
+    }
+    console.error("/api/datasets/[id] DELETE error", error);
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }

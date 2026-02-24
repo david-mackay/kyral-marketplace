@@ -113,8 +113,9 @@ export default function CreateDatasetPage() {
       <div>
         <h1 className="text-2xl font-bold text-zinc-100">Create Dataset</h1>
         <p className="text-sm text-zinc-500 mt-1">
-          Assemble a curated dataset from your listings and invite others to
-          contribute. Revenue is split proportionally.
+          Create a call to action for others to pool their data. Revenue is
+          split equally among contributors &mdash; you earn by contributing your
+          own data, not just by creating the dataset.
         </p>
       </div>
 

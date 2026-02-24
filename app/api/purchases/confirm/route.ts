@@ -7,7 +7,6 @@ import { db } from "@/server/db";
 import {
   purchases,
   dataListings,
-  datasets,
   datasetContributions,
   revenueEvents,
 } from "@/server/db/schema";
@@ -123,28 +122,16 @@ async function recordEntitlements(
       status: "pending",
     });
   } else {
-    // Dataset: split among contributors
+    // Dataset: split equally among contributors only.
+    // The dataset creator does NOT receive revenue for creating — only as a contributor.
     const contributions = await db.query.datasetContributions.findMany({
       where: eq(datasetContributions.datasetId, targetId),
     });
 
     if (contributions.length === 0) {
-      // No contributions — entitlement goes to the dataset creator
-      const dataset = await db.query.datasets.findFirst({
-        where: eq(datasets.id, targetId),
-      });
-      if (!dataset) return;
-
-      await db.insert(revenueEvents).values({
-        purchaseId,
-        recipientUserId: dataset.creatorUserId,
-        amountUsdc: distributableAmount,
-        status: "pending",
-      });
       return;
     }
 
-    // Equal split among all contributors
     const perContributorAmount = Math.floor(
       distributableAmount / contributions.length
     );

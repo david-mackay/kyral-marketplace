@@ -50,6 +50,7 @@ export default function DashboardPage() {
   const [purchases, setPurchases] = useState<PurchaseRow[]>([]);
   const [earnings, setEarnings] = useState<EarningsSummary | null>(null);
   const [loading, setLoading] = useState(true);
+  const [deleting, setDeleting] = useState<string | null>(null);
 
   const loadAll = useCallback(async () => {
     setLoading(true);
@@ -81,6 +82,29 @@ export default function DashboardPage() {
       setLoading(false);
     }
   }, []);
+
+  const handleDelete = useCallback(
+    async (type: "listing" | "dataset", id: string, title: string) => {
+      if (!confirm(`Delete "${title}"? This cannot be undone.`)) return;
+      setDeleting(id);
+      try {
+        const endpoint =
+          type === "listing" ? `/api/listings/${id}` : `/api/datasets/${id}`;
+        const res = await fetch(endpoint, { method: "DELETE" });
+        if (!res.ok) {
+          const data = await res.json();
+          alert(data.error || "Failed to delete");
+          return;
+        }
+        await loadAll();
+      } catch {
+        alert("Failed to delete");
+      } finally {
+        setDeleting(null);
+      }
+    },
+    [loadAll]
+  );
 
   useEffect(() => {
     void loadAll();
@@ -184,12 +208,14 @@ export default function DashboardPage() {
         ) : (
           <div className="rounded-xl border border-zinc-800 bg-zinc-900/50 divide-y divide-zinc-800">
             {listings.map((l) => (
-              <Link
+              <div
                 key={l.id}
-                href={`/marketplace/${l.id}?type=listing`}
                 className="flex items-center justify-between px-5 py-4 hover:bg-zinc-800/30 transition-colors"
               >
-                <div className="flex items-center gap-3 min-w-0">
+                <Link
+                  href={`/marketplace/${l.id}?type=listing`}
+                  className="flex items-center gap-3 min-w-0 flex-1"
+                >
                   <div className="min-w-0">
                     <div className="text-sm text-zinc-200 truncate">
                       {l.title}
@@ -199,8 +225,8 @@ export default function DashboardPage() {
                       {l.documentIds?.length ?? 0} file(s)
                     </div>
                   </div>
-                </div>
-                <div className="flex items-center gap-4 shrink-0">
+                </Link>
+                <div className="flex items-center gap-3 shrink-0">
                   <span
                     className={[
                       "text-xs px-2 py-0.5 rounded-md",
@@ -216,8 +242,20 @@ export default function DashboardPage() {
                   <span className="text-sm text-emerald-400 font-medium">
                     {formatUsdc(l.priceUsdc)}
                   </span>
+                  <button
+                    onClick={() =>
+                      void handleDelete("listing", l.id, l.title)
+                    }
+                    disabled={deleting === l.id}
+                    className="p-1.5 rounded-md text-zinc-600 hover:text-red-400 hover:bg-red-500/10 transition-colors disabled:opacity-50"
+                    title="Delete listing"
+                  >
+                    <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.5">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="m14.74 9-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 0 1-2.244 2.077H8.084a2.25 2.25 0 0 1-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 0 0-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 0 1 3.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 0 0-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 0 0-7.5 0" />
+                    </svg>
+                  </button>
                 </div>
-              </Link>
+              </div>
             ))}
           </div>
         )}
@@ -239,12 +277,14 @@ export default function DashboardPage() {
         ) : (
           <div className="rounded-xl border border-zinc-800 bg-zinc-900/50 divide-y divide-zinc-800">
             {datasets.map((d) => (
-              <Link
+              <div
                 key={d.id}
-                href={`/marketplace/${d.id}?type=dataset`}
                 className="flex items-center justify-between px-5 py-4 hover:bg-zinc-800/30 transition-colors"
               >
-                <div className="min-w-0">
+                <Link
+                  href={`/marketplace/${d.id}?type=dataset`}
+                  className="min-w-0 flex-1"
+                >
                   <div className="text-sm text-zinc-200 truncate">
                     {d.title}
                   </div>
@@ -252,8 +292,8 @@ export default function DashboardPage() {
                     {CATEGORY_LABELS[d.category]} &middot;{" "}
                     {d.totalContributions} contributor(s)
                   </div>
-                </div>
-                <div className="flex items-center gap-4 shrink-0">
+                </Link>
+                <div className="flex items-center gap-3 shrink-0">
                   <span
                     className={[
                       "text-xs px-2 py-0.5 rounded-md",
@@ -267,8 +307,20 @@ export default function DashboardPage() {
                   <span className="text-sm text-emerald-400 font-medium">
                     {formatUsdc(d.priceUsdc)}
                   </span>
+                  <button
+                    onClick={() =>
+                      void handleDelete("dataset", d.id, d.title)
+                    }
+                    disabled={deleting === d.id}
+                    className="p-1.5 rounded-md text-zinc-600 hover:text-red-400 hover:bg-red-500/10 transition-colors disabled:opacity-50"
+                    title="Delete dataset"
+                  >
+                    <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.5">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="m14.74 9-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 0 1-2.244 2.077H8.084a2.25 2.25 0 0 1-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 0 0-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 0 1 3.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 0 0-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 0 0-7.5 0" />
+                    </svg>
+                  </button>
                 </div>
-              </Link>
+              </div>
             ))}
           </div>
         )}

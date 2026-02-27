@@ -4,7 +4,12 @@ import { z } from "zod";
 
 import { requireAuthenticatedUser } from "@/server/auth/session";
 import { db } from "@/server/db";
-import { dataListings, users, datasetContributions } from "@/server/db/schema";
+import {
+  dataListings,
+  users,
+  datasetContributions,
+  purchases,
+} from "@/server/db/schema";
 
 export const runtime = "nodejs";
 
@@ -120,6 +125,58 @@ export async function PATCH(
       );
     }
     console.error("/api/listings/[id] PATCH error", error);
+    return NextResponse.json(
+      { error: "Internal server error" },
+      { status: 500 }
+    );
+  }
+}
+
+export async function DELETE(
+  _req: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const user = await requireAuthenticatedUser();
+    const { id } = await params;
+
+    const existing = await db.query.dataListings.findFirst({
+      where: and(
+        eq(dataListings.id, id),
+        eq(dataListings.ownerUserId, user.id)
+      ),
+    });
+
+    if (!existing) {
+      return NextResponse.json(
+        { error: "Not found or not owned by you" },
+        { status: 404 }
+      );
+    }
+
+    const confirmedPurchase = await db.query.purchases.findFirst({
+      where: and(
+        eq(purchases.targetType, "listing"),
+        eq(purchases.targetId, id),
+        eq(purchases.status, "confirmed")
+      ),
+    });
+
+    if (confirmedPurchase) {
+      return NextResponse.json(
+        { error: "Cannot delete a listing that has been purchased" },
+        { status: 400 }
+      );
+    }
+
+    await db.delete(dataListings).where(eq(dataListings.id, id));
+
+    return NextResponse.json({ ok: true });
+  } catch (error) {
+    if (error instanceof Error && error.message === "UNAUTHENTICATED") {
+      return NextResponse.json({ error: "Unauthenticated" }, { status: 401 });
+    }
+    console.error("/api/listings/[id] DELETE error", error);
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }

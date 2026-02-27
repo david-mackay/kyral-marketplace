@@ -1,10 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
-import { eq } from "drizzle-orm";
+import { eq, and } from "drizzle-orm";
 import { z } from "zod";
 
 import { requireAuthenticatedUser } from "@/server/auth/session";
 import { db } from "@/server/db";
-import { dataListings, datasets, purchases } from "@/server/db/schema";
+import {
+  dataListings,
+  datasets,
+  datasetContributions,
+  purchases,
+} from "@/server/db/schema";
 import { getEscrowKeypair, getUsdcMint } from "@/server/solana/config";
 
 export const runtime = "nodejs";
@@ -55,6 +60,20 @@ export async function POST(req: NextRequest) {
           { status: 400 }
         );
       }
+
+      const contributions = await db.query.datasetContributions.findMany({
+        where: and(
+          eq(datasetContributions.datasetId, targetId),
+          eq(datasetContributions.status, "active")
+        ),
+      });
+      if (contributions.length === 0) {
+        return NextResponse.json(
+          { error: "This dataset has no active contributions" },
+          { status: 400 }
+        );
+      }
+
       amountUsdc = dataset.priceUsdc;
     }
 

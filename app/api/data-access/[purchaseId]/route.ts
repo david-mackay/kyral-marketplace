@@ -1,16 +1,17 @@
 import { NextRequest, NextResponse } from "next/server";
 import { eq, and, inArray } from "drizzle-orm";
+import archiver from "archiver";
+import { PassThrough } from "node:stream";
 
 import { requireAuthenticatedUser } from "@/server/auth/session";
 import { db } from "@/server/db";
 import {
   purchases,
   dataListings,
-  datasets,
   datasetContributions,
   documents,
 } from "@/server/db/schema";
-import { getPresignedUrl } from "@/server/storage/s3";
+import { getPresignedUrl, getObjectBuffer } from "@/server/storage/s3";
 
 export const runtime = "nodejs";
 
@@ -22,7 +23,6 @@ export async function GET(
     const user = await requireAuthenticatedUser();
     const { purchaseId } = await params;
 
-    // Verify the purchase belongs to this user and is confirmed
     const purchase = await db.query.purchases.findFirst({
       where: and(
         eq(purchases.id, purchaseId),
@@ -38,7 +38,6 @@ export async function GET(
       );
     }
 
-    // Get the document IDs based on target type
     let documentIds: string[] = [];
 
     if (purchase.targetType === "listing") {
@@ -49,9 +48,12 @@ export async function GET(
         documentIds = (listing.documentIds as string[]) ?? [];
       }
     } else {
-      // Dataset: collect all document IDs from all contributions
+      // Dataset: collect documents only from active (non-revoked) contributions
       const contributions = await db.query.datasetContributions.findMany({
-        where: eq(datasetContributions.datasetId, purchase.targetId),
+        where: and(
+          eq(datasetContributions.datasetId, purchase.targetId),
+          eq(datasetContributions.status, "active")
+        ),
       });
 
       const listingIds = contributions.map((c) => c.listingId);
@@ -67,14 +69,70 @@ export async function GET(
     }
 
     if (documentIds.length === 0) {
+      if (purchase.targetType === "dataset") {
+        return NextResponse.json({ files: [], zip: false });
+      }
       return NextResponse.json({ files: [] });
     }
 
-    // Get document metadata and generate presigned URLs
     const docs = await db.query.documents.findMany({
       where: inArray(documents.id, documentIds),
     });
 
+    // For datasets: stream a ZIP archive at runtime
+    if (purchase.targetType === "dataset") {
+      const passthrough = new PassThrough();
+      const archive = archiver("zip", { zlib: { level: 5 } });
+      archive.pipe(passthrough);
+
+      const usedNames = new Set<string>();
+
+      for (const doc of docs) {
+        if (!doc.objectKey) continue;
+        try {
+          const buffer = await getObjectBuffer({ key: doc.objectKey });
+          let name = doc.originalFileName ?? doc.id;
+          // Deduplicate file names within the ZIP
+          if (usedNames.has(name)) {
+            const ext = name.lastIndexOf(".");
+            const base = ext > 0 ? name.slice(0, ext) : name;
+            const suffix = ext > 0 ? name.slice(ext) : "";
+            let i = 2;
+            while (usedNames.has(`${base}_${i}${suffix}`)) i++;
+            name = `${base}_${i}${suffix}`;
+          }
+          usedNames.add(name);
+          archive.append(buffer, { name });
+        } catch {
+          // Skip files that fail to fetch
+        }
+      }
+
+      void archive.finalize();
+
+      const readableStream = new ReadableStream({
+        start(controller) {
+          passthrough.on("data", (chunk: Buffer) => {
+            controller.enqueue(new Uint8Array(chunk));
+          });
+          passthrough.on("end", () => {
+            controller.close();
+          });
+          passthrough.on("error", (err) => {
+            controller.error(err);
+          });
+        },
+      });
+
+      return new Response(readableStream, {
+        headers: {
+          "Content-Type": "application/zip",
+          "Content-Disposition": `attachment; filename="dataset-${purchase.targetId.slice(0, 8)}.zip"`,
+        },
+      });
+    }
+
+    // For individual listings: return presigned URLs as before
     const files = await Promise.all(
       docs.map(async (doc) => {
         let downloadUrl: string | null = null;
@@ -82,7 +140,7 @@ export async function GET(
           try {
             downloadUrl = await getPresignedUrl({
               key: doc.objectKey,
-              expiresInSeconds: 3600, // 1 hour
+              expiresInSeconds: 3600,
             });
           } catch {
             // URL generation failed

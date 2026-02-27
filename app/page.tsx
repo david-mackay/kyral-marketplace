@@ -6,7 +6,6 @@ import { GlobalPopulationCounter } from "@/components/GlobalPopulationCounter";
 export default function HomePage() {
   return (
     <div className="min-h-[calc(100vh-4rem)]">
-
       {/* ── 1. HERO ─────────────────────────────────────────────── */}
       <section className="relative overflow-hidden">
         <div className="absolute inset-0 bg-gradient-to-b from-emerald-950/20 via-transparent to-transparent" />
@@ -17,7 +16,7 @@ export default function HomePage() {
               Built on Solana
             </div>
             <h1 className="text-4xl sm:text-5xl lg:text-6xl font-bold tracking-tight text-zinc-50 leading-[1.1]">
-              Corporations earn{" "}
+              Corporations are earning over{" "}
               <span className="bg-gradient-to-r from-emerald-400 to-blue-400 bg-clip-text text-transparent">
                 $100,000
               </span>{" "}
@@ -26,7 +25,8 @@ export default function HomePage() {
               <span className="text-zinc-400"> You get nothing.</span>
             </h1>
             <p className="mt-6 text-lg text-zinc-400 max-w-2xl leading-relaxed">
-              Kyral lets you own your health data and get paid when researchers use it.
+              Kyral lets you own your health data and get paid when researchers
+              use it.
             </p>
             <div className="mt-10 flex flex-col sm:flex-row gap-4">
               <Link
@@ -56,7 +56,9 @@ export default function HomePage() {
         <p className="mt-8 text-base sm:text-lg text-zinc-500 max-w-lg mx-auto leading-relaxed">
           Every one of them generates data worth tens of thousands of dollars
           over their lifetime.{" "}
-          <span className="text-zinc-200 font-medium">Not one of them owns it.</span>
+          <span className="text-zinc-200 font-medium">
+            Not one of them owns it.
+          </span>
         </p>
       </section>
 
@@ -64,12 +66,12 @@ export default function HomePage() {
       <section className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-8 pb-20">
         <div className="max-w-3xl mx-auto text-center">
           <h2 className="text-2xl sm:text-3xl font-bold text-zinc-50">
-            AI is flooding the world with synthetic identities.
-            Real human health data has never been worth more.
+            AI is flooding the world with synthetic identities. Real human
+            health data has never been worth more.
           </h2>
           <p className="mt-5 text-lg text-zinc-400 leading-relaxed">
-            Kyral is built so that value flows to the people who create it.
-            Your data. Your earnings. Your family's inheritance.
+            Kyral is built so that value flows to the people who create it. Your
+            data. Your earnings. Your family's inheritance.
           </p>
         </div>
       </section>
@@ -123,10 +125,11 @@ export default function HomePage() {
       <section className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 pb-32">
         <div className="rounded-2xl border border-emerald-900/40 bg-gradient-to-br from-emerald-950/60 to-zinc-950 p-10 sm:p-16 text-center">
           <h2 className="text-2xl sm:text-3xl lg:text-4xl font-bold text-zinc-50">
-            Stop donating. Start earning.
+            Stop participating. Start earning.
           </h2>
           <p className="mt-4 text-zinc-400 max-w-lg mx-auto leading-relaxed">
-            Connect your Solana wallet, upload your records, and get paid when researchers use your data. Takes under a minute.
+            Connect your Solana wallet, upload your records, and get paid when
+            researchers use your data. Takes under a minute.
           </p>
           <div className="mt-8 flex flex-col sm:flex-row gap-4 justify-center">
             <Link
@@ -144,7 +147,6 @@ export default function HomePage() {
           </div>
         </div>
       </section>
-
     </div>
   );
 }
@@ -163,7 +165,9 @@ function PillarCard({
   return (
     <div className="card-glow rounded-xl border border-zinc-800 bg-zinc-900/50 p-8 space-y-4 flex flex-col">
       <div className="flex items-center gap-3">
-        <span className="text-xs font-bold text-emerald-500 tracking-widest">{step}</span>
+        <span className="text-xs font-bold text-emerald-500 tracking-widest">
+          {step}
+        </span>
         <div className="h-px flex-1 bg-zinc-800" />
         <div className="h-9 w-9 rounded-lg bg-zinc-800 flex items-center justify-center">
           <svg

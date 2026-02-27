@@ -1,11 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
-import { eq, and } from "drizzle-orm";
+import { eq, and, sql } from "drizzle-orm";
 import { z } from "zod";
 
 import { requireAuthenticatedUser } from "@/server/auth/session";
 import { db } from "@/server/db";
 import {
   dataListings,
+  datasets,
   users,
   datasetContributions,
   purchases,
@@ -169,6 +170,31 @@ export async function DELETE(
       );
     }
 
+    // Decrement totalContributions on any datasets this listing contributed to
+    const activeContributions = await db.query.datasetContributions.findMany({
+      where: and(
+        eq(datasetContributions.listingId, id),
+        eq(datasetContributions.status, "active")
+      ),
+    });
+
+    const affectedDatasetIds = [
+      ...new Set(activeContributions.map((c) => c.datasetId)),
+    ];
+    for (const datasetId of affectedDatasetIds) {
+      const count = activeContributions.filter(
+        (c) => c.datasetId === datasetId
+      ).length;
+      await db
+        .update(datasets)
+        .set({
+          totalContributions: sql`GREATEST(${datasets.totalContributions} - ${count}, 0)`,
+          updatedAt: new Date(),
+        })
+        .where(eq(datasets.id, datasetId));
+    }
+
+    // Cascade deletes the contribution rows via FK
     await db.delete(dataListings).where(eq(dataListings.id, id));
 
     return NextResponse.json({ ok: true });

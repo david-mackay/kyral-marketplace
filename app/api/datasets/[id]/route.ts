@@ -8,7 +8,6 @@ import {
   users,
   datasetContributions,
   dataListings,
-  purchases,
 } from "@/server/db/schema";
 
 
@@ -106,17 +105,17 @@ export async function DELETE(
       );
     }
 
-    const confirmedPurchase = await db.query.purchases.findFirst({
+    // Allow deletion of purchased datasets only if no active contributions remain
+    const activeContributions = await db.query.datasetContributions.findMany({
       where: and(
-        eq(purchases.targetType, "dataset"),
-        eq(purchases.targetId, id),
-        eq(purchases.status, "confirmed")
+        eq(datasetContributions.datasetId, id),
+        eq(datasetContributions.status, "active")
       ),
     });
 
-    if (confirmedPurchase) {
+    if (activeContributions.length > 0) {
       return NextResponse.json(
-        { error: "Cannot delete a dataset that has been purchased" },
+        { error: "Cannot delete a dataset that still has active contributions. Contributors must revoke first." },
         { status: 400 }
       );
     }

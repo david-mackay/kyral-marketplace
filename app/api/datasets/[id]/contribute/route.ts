@@ -10,6 +10,10 @@ import {
   datasetContributions,
 } from "@/server/db/schema";
 
+const RevokeSchema = z.object({
+  listingId: z.string().uuid(),
+});
+
 export const runtime = "nodejs";
 
 const ContributeSchema = z.object({
@@ -60,7 +64,7 @@ export async function POST(
       );
     }
 
-    // Check for duplicate contribution
+    // Check for existing contribution (may be revoked — reactivate if so)
     const existing = await db.query.datasetContributions.findFirst({
       where: and(
         eq(datasetContributions.datasetId, datasetId),
@@ -68,25 +72,32 @@ export async function POST(
       ),
     });
 
-    if (existing) {
+    let contribution;
+
+    if (existing && existing.status === "active") {
       return NextResponse.json(
         { error: "This listing is already contributed to this dataset" },
         { status: 409 }
       );
+    } else if (existing && existing.status === "revoked") {
+      // Reactivate previously revoked contribution
+      [contribution] = await db
+        .update(datasetContributions)
+        .set({ status: "active", revokedAt: null })
+        .where(eq(datasetContributions.id, existing.id))
+        .returning();
+    } else {
+      [contribution] = await db
+        .insert(datasetContributions)
+        .values({
+          datasetId,
+          contributorUserId: user.id,
+          listingId,
+          shareNumerator: 1,
+          shareDenominator: 1,
+        })
+        .returning();
     }
-
-    // Add contribution with equal share (1:1 for now; share recalculated on fetch)
-    const contribution = await db
-      .insert(datasetContributions)
-      .values({
-        datasetId,
-        contributorUserId: user.id,
-        listingId,
-        shareNumerator: 1,
-        shareDenominator: 1, // Will be total contributions count
-      })
-      .returning()
-      .then((rows) => rows[0]);
 
     // Increment total contributions
     await db
@@ -109,6 +120,64 @@ export async function POST(
       );
     }
     console.error("/api/datasets/[id]/contribute POST error", error);
+    return NextResponse.json(
+      { error: "Internal server error" },
+      { status: 500 }
+    );
+  }
+}
+
+export async function DELETE(
+  req: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const user = await requireAuthenticatedUser();
+    const { id: datasetId } = await params;
+    const body = await req.json();
+    const { listingId } = RevokeSchema.parse(body);
+
+    const contribution = await db.query.datasetContributions.findFirst({
+      where: and(
+        eq(datasetContributions.datasetId, datasetId),
+        eq(datasetContributions.listingId, listingId),
+        eq(datasetContributions.contributorUserId, user.id),
+        eq(datasetContributions.status, "active")
+      ),
+    });
+
+    if (!contribution) {
+      return NextResponse.json(
+        { error: "Active contribution not found" },
+        { status: 404 }
+      );
+    }
+
+    await db
+      .update(datasetContributions)
+      .set({ status: "revoked", revokedAt: new Date() })
+      .where(eq(datasetContributions.id, contribution.id));
+
+    await db
+      .update(datasets)
+      .set({
+        totalContributions: sql`GREATEST(${datasets.totalContributions} - 1, 0)`,
+        updatedAt: new Date(),
+      })
+      .where(eq(datasets.id, datasetId));
+
+    return NextResponse.json({ ok: true });
+  } catch (error) {
+    if (error instanceof Error && error.message === "UNAUTHENTICATED") {
+      return NextResponse.json({ error: "Unauthenticated" }, { status: 401 });
+    }
+    if (error instanceof z.ZodError) {
+      return NextResponse.json(
+        { error: "Validation error", details: error.errors },
+        { status: 400 }
+      );
+    }
+    console.error("/api/datasets/[id]/contribute DELETE error", error);
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }

@@ -58,6 +58,11 @@ export const dataCategoryEnum = pgEnum("data_category", [
   "other",
 ]);
 
+export const contributionStatusEnum = pgEnum("contribution_status", [
+  "active",
+  "revoked",
+]);
+
 export const purchaseTargetTypeEnum = pgEnum("purchase_target_type", [
   "listing",
   "dataset",
@@ -170,7 +175,9 @@ export const datasetContributions = pgTable(
       .references(() => dataListings.id, { onDelete: "cascade" }),
     shareNumerator: integer("share_numerator").notNull().default(1),
     shareDenominator: integer("share_denominator").notNull().default(1),
+    status: contributionStatusEnum("status").notNull().default("active"),
     joinedAt: timestamp("joined_at").defaultNow().notNull(),
+    revokedAt: timestamp("revoked_at"),
   },
   (table) => ({
     datasetIdx: index("dataset_contributions_dataset_idx").on(table.datasetId),
@@ -224,6 +231,10 @@ export const revenueEvents = pgTable(
     amountUsdc: bigint("amount_usdc", { mode: "number" }).notNull(),
     txSignature: text("tx_signature"),
     status: revenueEventStatusEnum("status").notNull().default("pending"),
+    // Set to the moment a withdrawal batch is initiated (status → sent).
+    // All events in the same batch share the same timestamp, which lets us
+    // count distinct withdrawal batches for rate-limiting without a separate table.
+    withdrawnAt: timestamp("withdrawn_at"),
     createdAt: timestamp("created_at").defaultNow().notNull(),
   },
   (table) => ({

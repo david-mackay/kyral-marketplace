@@ -13,6 +13,18 @@ type ListingRow = {
   status: string;
 };
 
+type DatasetPlan = {
+  title: string;
+  description: string;
+  category: string;
+  suggestedPriceUsdc: number;
+  dataRequirements: string[];
+  targetDemographics: string[];
+  scientificValue: string;
+  suggestedBiomarkers: string[];
+  estimatedSampleSize: string;
+};
+
 export default function CreateDatasetPage() {
   const router = useRouter();
   const [title, setTitle] = useState("");
@@ -21,6 +33,12 @@ export default function CreateDatasetPage() {
   const [priceUsdc, setPriceUsdc] = useState("");
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // BioAgents AI planner
+  const [aiTopic, setAiTopic] = useState("");
+  const [aiGenerating, setAiGenerating] = useState(false);
+  const [aiError, setAiError] = useState<string | null>(null);
+  const [aiPlan, setAiPlan] = useState<DatasetPlan | null>(null);
 
   // For adding initial contributions
   const [myListings, setMyListings] = useState<ListingRow[]>([]);
@@ -57,6 +75,44 @@ export default function CreateDatasetPage() {
     });
   };
 
+  const handleGenerate = async () => {
+    if (!aiTopic.trim() || aiTopic.trim().length < 5) {
+      setAiError("Describe your research topic in at least a few words.");
+      return;
+    }
+    setAiGenerating(true);
+    setAiError(null);
+    setAiPlan(null);
+
+    try {
+      const res = await fetch("/api/bios/plan-dataset", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ topic: aiTopic.trim() }),
+      });
+
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error || "Failed to generate plan");
+      }
+
+      const { plan } = (await res.json()) as { plan: DatasetPlan };
+      setAiPlan(plan);
+
+      // Auto-fill form fields
+      setTitle(plan.title);
+      setDescription(plan.description);
+      if (DATA_CATEGORIES.includes(plan.category)) {
+        setCategory(plan.category);
+      }
+      setPriceUsdc(String(plan.suggestedPriceUsdc));
+    } catch (e) {
+      setAiError(e instanceof Error ? e.message : "Generation failed");
+    } finally {
+      setAiGenerating(false);
+    }
+  };
+
   const handleCreate = async () => {
     if (!title.trim()) {
       setError("Title is required");
@@ -72,7 +128,6 @@ export default function CreateDatasetPage() {
     setError(null);
 
     try {
-      // Create the dataset
       const createRes = await fetch("/api/datasets", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -91,7 +146,6 @@ export default function CreateDatasetPage() {
 
       const { dataset } = await createRes.json();
 
-      // Add initial contributions from selected listings
       for (const listingId of selectedListingIds) {
         await fetch(`/api/datasets/${dataset.id}/contribute`, {
           method: "POST",
@@ -119,6 +173,127 @@ export default function CreateDatasetPage() {
         </p>
       </div>
 
+      {/* ── BioAgents AI Planner ────────────────────────────────────── */}
+      <div className="rounded-xl border border-blue-500/20 bg-gradient-to-br from-blue-950/30 to-zinc-950 p-5 space-y-4">
+        <div className="flex items-center gap-2.5">
+          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-500/10 border border-blue-500/20">
+            <svg
+              viewBox="0 0 24 24"
+              className="h-4.5 w-4.5 text-blue-400"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.5"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09zM18.259 8.715L18 9.75l-.259-1.035a3.375 3.375 0 00-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 002.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 002.455 2.456L21.75 6l-1.036.259a3.375 3.375 0 00-2.455 2.456zM16.894 20.567L16.5 21.75l-.394-1.183a2.25 2.25 0 00-1.423-1.423L13.5 18.75l1.183-.394a2.25 2.25 0 001.423-1.423l.394-1.183.394 1.183a2.25 2.25 0 001.423 1.423l1.183.394-1.183.394a2.25 2.25 0 00-1.423 1.423z"
+              />
+            </svg>
+          </div>
+          <div>
+            <h2 className="text-sm font-semibold text-blue-300">
+              BioAgents Dataset Planner
+            </h2>
+            <p className="text-xs text-zinc-500">
+              Powered by BIO Protocol &middot; AI-assisted dataset design
+            </p>
+          </div>
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-zinc-300 mb-1.5">
+            Describe your research topic
+          </label>
+          <textarea
+            value={aiTopic}
+            onChange={(e) => setAiTopic(e.target.value)}
+            placeholder="e.g. Effects of intermittent fasting on metabolic biomarkers in adults with Type 2 diabetes..."
+            rows={3}
+            disabled={aiGenerating}
+            className="w-full px-4 py-2.5 rounded-lg border border-zinc-800 bg-zinc-900 text-sm text-zinc-200 placeholder:text-zinc-600 outline-none focus:border-blue-500/50 resize-none disabled:opacity-50"
+          />
+        </div>
+
+        {aiError && (
+          <div className="rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs text-red-400">
+            {aiError}
+          </div>
+        )}
+
+        <button
+          onClick={() => void handleGenerate()}
+          disabled={aiGenerating || !aiTopic.trim()}
+          className="w-full py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-medium text-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          {aiGenerating ? (
+            <span className="inline-flex items-center gap-2">
+              Generating plan <LoadingDots />
+            </span>
+          ) : (
+            "Generate Dataset Plan"
+          )}
+        </button>
+
+        {/* AI-generated insights panel */}
+        {aiPlan && (
+          <div className="mt-2 space-y-3 rounded-lg border border-zinc-800 bg-zinc-900/60 p-4">
+            <div className="flex items-center gap-2 mb-3">
+              <div className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+              <p className="text-xs font-medium text-emerald-400">
+                Plan generated &mdash; form auto-filled below. Additional
+                insights:
+              </p>
+            </div>
+
+            <InsightBlock title="Scientific Value">
+              <p className="text-sm text-zinc-400">{aiPlan.scientificValue}</p>
+            </InsightBlock>
+
+            <InsightBlock title="Suggested Biomarkers">
+              <div className="flex flex-wrap gap-1.5">
+                {aiPlan.suggestedBiomarkers.map((b) => (
+                  <span
+                    key={b}
+                    className="px-2 py-0.5 rounded-full bg-zinc-800 text-xs text-zinc-300 border border-zinc-700"
+                  >
+                    {b}
+                  </span>
+                ))}
+              </div>
+            </InsightBlock>
+
+            <InsightBlock title="Data Requirements">
+              <ul className="text-sm text-zinc-400 space-y-1 list-disc list-inside">
+                {aiPlan.dataRequirements.map((r) => (
+                  <li key={r}>{r}</li>
+                ))}
+              </ul>
+            </InsightBlock>
+
+            <InsightBlock title="Target Demographics">
+              <div className="flex flex-wrap gap-1.5">
+                {aiPlan.targetDemographics.map((d) => (
+                  <span
+                    key={d}
+                    className="px-2 py-0.5 rounded-full bg-zinc-800 text-xs text-zinc-300 border border-zinc-700"
+                  >
+                    {d}
+                  </span>
+                ))}
+              </div>
+            </InsightBlock>
+
+            <InsightBlock title="Recommended Sample Size">
+              <p className="text-sm text-zinc-400">
+                {aiPlan.estimatedSampleSize}
+              </p>
+            </InsightBlock>
+          </div>
+        )}
+      </div>
+
+      {/* ── Dataset Form ───────────────────────────────────────────── */}
       {error && (
         <div className="rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-400">
           {error}
@@ -237,8 +412,8 @@ export default function CreateDatasetPage() {
                       {listing.title}
                     </div>
                     <div className="text-xs text-zinc-500">
-                      {CATEGORY_LABELS[listing.category] ?? listing.category} &middot;{" "}
-                      {formatUsdc(listing.priceUsdc)}
+                      {CATEGORY_LABELS[listing.category] ?? listing.category}{" "}
+                      &middot; {formatUsdc(listing.priceUsdc)}
                     </div>
                   </div>
                 </label>
@@ -262,6 +437,23 @@ export default function CreateDatasetPage() {
           )}
         </button>
       </div>
+    </div>
+  );
+}
+
+function InsightBlock({
+  title,
+  children,
+}: {
+  title: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div>
+      <p className="text-xs font-medium text-zinc-500 uppercase tracking-wider mb-1.5">
+        {title}
+      </p>
+      {children}
     </div>
   );
 }

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { eq } from "drizzle-orm";
+import { eq, and } from "drizzle-orm";
 import { z } from "zod";
 
 import { requireAuthenticatedUser } from "@/server/auth/session";
@@ -62,11 +62,14 @@ export async function POST(req: NextRequest) {
       }
 
       const contributions = await db.query.datasetContributions.findMany({
-        where: eq(datasetContributions.datasetId, targetId),
+        where: and(
+          eq(datasetContributions.datasetId, targetId),
+          eq(datasetContributions.status, "active")
+        ),
       });
       if (contributions.length === 0) {
         return NextResponse.json(
-          { error: "This dataset has no contributions yet" },
+          { error: "This dataset has no active contributions" },
           { status: 400 }
         );
       }

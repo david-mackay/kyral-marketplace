@@ -11,6 +11,7 @@ import {
   purchases,
 } from "@/server/db/schema";
 
+
 export const runtime = "nodejs";
 
 export async function GET(
@@ -43,7 +44,7 @@ export async function GET(
       return NextResponse.json({ error: "Not found" }, { status: 404 });
     }
 
-    // Get contributions with contributor info
+    // Get active contributions with contributor info
     const contributions = await db
       .select({
         id: datasetContributions.id,
@@ -51,6 +52,7 @@ export async function GET(
         listingId: datasetContributions.listingId,
         shareNumerator: datasetContributions.shareNumerator,
         shareDenominator: datasetContributions.shareDenominator,
+        status: datasetContributions.status,
         joinedAt: datasetContributions.joinedAt,
         contributorWallet: users.walletAddress,
         contributorName: users.displayName,
@@ -65,7 +67,12 @@ export async function GET(
         dataListings,
         eq(datasetContributions.listingId, dataListings.id)
       )
-      .where(eq(datasetContributions.datasetId, id));
+      .where(
+        and(
+          eq(datasetContributions.datasetId, id),
+          eq(datasetContributions.status, "active")
+        )
+      );
 
     return NextResponse.json({ dataset, contributions });
   } catch (error) {

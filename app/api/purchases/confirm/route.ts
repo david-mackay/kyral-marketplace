@@ -122,10 +122,13 @@ async function recordEntitlements(
       status: "pending",
     });
   } else {
-    // Dataset: split equally among contributors only.
-    // The dataset creator does NOT receive revenue for creating — only as a contributor.
+    // Dataset: split equally among active contributors only.
+    // Revoked contributors do not earn from new purchases.
     const contributions = await db.query.datasetContributions.findMany({
-      where: eq(datasetContributions.datasetId, targetId),
+      where: and(
+        eq(datasetContributions.datasetId, targetId),
+        eq(datasetContributions.status, "active")
+      ),
     });
 
     if (contributions.length === 0) {

@@ -36,6 +36,7 @@ export default function MarketplaceDetailPage() {
   const [myListings, setMyListings] = useState<{ id: string; title: string; category: string }[]>([]);
   const [contributing, setContributing] = useState<string | null>(null);
   const [contributeError, setContributeError] = useState<string | null>(null);
+  const [revoking, setRevoking] = useState<string | null>(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
 
   const loadData = useCallback(async () => {
@@ -215,6 +216,33 @@ export default function MarketplaceDetailPage() {
     [id, loadData]
   );
 
+  const handleRevoke = useCallback(
+    async (listingId: string) => {
+      if (!confirm("Revoke this contribution? You will no longer earn from future purchases of this dataset.")) return;
+      setRevoking(listingId);
+      setContributeError(null);
+      try {
+        const res = await fetch(`/api/datasets/${id}/contribute`, {
+          method: "DELETE",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ listingId }),
+        });
+        if (!res.ok) {
+          const err = await res.json();
+          throw new Error(err.error ?? "Failed to revoke");
+        }
+        await loadData();
+      } catch (error) {
+        setContributeError(
+          error instanceof Error ? error.message : "Failed to revoke"
+        );
+      } finally {
+        setRevoking(null);
+      }
+    },
+    [id, loadData]
+  );
+
   const handleDelete = useCallback(async () => {
     const label = type === "dataset" ? "dataset" : "listing";
     if (!confirm(`Delete this ${label}? This cannot be undone.`)) return;
@@ -376,39 +404,62 @@ export default function MarketplaceDetailPage() {
               Contributors
             </h2>
             <div className="space-y-2">
-              {contributions.map((c) => (
-                <div
-                  key={c.id as string}
-                  className="flex items-center justify-between px-4 py-2.5 rounded-lg bg-zinc-800/50 border border-zinc-800"
-                >
-                  <div className="flex items-center gap-3">
-                    <div className="h-6 w-6 rounded-full bg-zinc-700 flex items-center justify-center text-[10px] text-zinc-400">
-                      {(
-                        (c.contributorName as string) ??
-                        (c.contributorWallet as string) ??
-                        "?"
-                      )
-                        .charAt(0)
-                        .toUpperCase()}
+              {contributions.map((c) => {
+                const isMyContribution =
+                  user?.id === (c.contributorUserId as string);
+                return (
+                  <div
+                    key={c.id as string}
+                    className="flex items-center justify-between px-4 py-2.5 rounded-lg bg-zinc-800/50 border border-zinc-800"
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="h-6 w-6 rounded-full bg-zinc-700 flex items-center justify-center text-[10px] text-zinc-400">
+                        {(
+                          (c.contributorName as string) ??
+                          (c.contributorWallet as string) ??
+                          "?"
+                        )
+                          .charAt(0)
+                          .toUpperCase()}
+                      </div>
+                      <div>
+                        <div className="text-sm text-zinc-300">
+                          {(c.contributorName as string) ??
+                            truncateAddress(
+                              (c.contributorWallet as string) ?? ""
+                            )}
+                        </div>
+                        <div className="text-xs text-zinc-600">
+                          {c.listingTitle as string}
+                        </div>
+                      </div>
                     </div>
-                    <div>
-                      <div className="text-sm text-zinc-300">
-                        {(c.contributorName as string) ??
-                          truncateAddress(
-                            (c.contributorWallet as string) ?? ""
+                    <div className="flex items-center gap-3">
+                      <div className="text-xs text-zinc-500">
+                        Share: {c.shareNumerator as number}/
+                        {totalContributions || 1}
+                      </div>
+                      {isMyContribution && (
+                        <button
+                          onClick={() =>
+                            void handleRevoke(c.listingId as string)
+                          }
+                          disabled={revoking !== null}
+                          className="px-3 py-1 rounded-lg border border-red-500/30 text-red-400 hover:bg-red-500/10 text-xs font-medium transition-colors disabled:opacity-50"
+                        >
+                          {revoking === (c.listingId as string) ? (
+                            <span className="inline-flex items-center gap-1">
+                              Revoking <LoadingDots />
+                            </span>
+                          ) : (
+                            "Revoke"
                           )}
-                      </div>
-                      <div className="text-xs text-zinc-600">
-                        {c.listingTitle as string}
-                      </div>
+                        </button>
+                      )}
                     </div>
                   </div>
-                  <div className="text-xs text-zinc-500">
-                    Share: {c.shareNumerator as number}/
-                    {totalContributions || 1}
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </div>
         )}

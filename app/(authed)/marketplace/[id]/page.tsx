@@ -543,52 +543,49 @@ export default function MarketplaceDetailPage() {
               dashboard.
             </div>
           </div>
-        ) : !isOwner ? (
-          type === "dataset" && totalContributions === 0 ? (
-            <div className="rounded-lg border border-zinc-700 bg-zinc-800/50 px-4 py-4 text-center">
-              <div className="text-sm text-zinc-400">
-                This dataset has no contributions yet and cannot be purchased.
-              </div>
-              <div className="text-xs text-zinc-600 mt-1">
-                Contribute your data to help build this dataset.
-              </div>
+        ) : isOwner && type === "listing" ? (
+          <div className="text-center text-xs text-zinc-500 py-2">
+            This is your listing. You already own this data.
+          </div>
+        ) : type === "dataset" && totalContributions === 0 ? (
+          <div className="rounded-lg border border-zinc-700 bg-zinc-800/50 px-4 py-4 text-center">
+            <div className="text-sm text-zinc-400">
+              This dataset has no contributions yet and cannot be purchased.
             </div>
-          ) : (
-            <button
-              onClick={() => void handlePurchase()}
-              disabled={purchasing}
-              className="w-full py-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-medium text-sm transition-colors disabled:opacity-50"
-            >
-              {purchasing ? (
-                <span className="inline-flex items-center gap-2">
-                  Processing <LoadingDots />
-                </span>
-              ) : (
-                `Purchase for ${formatUsdc(priceUsdc)} USDC`
-              )}
-            </button>
-          )
-        ) : null}
+            <div className="text-xs text-zinc-600 mt-1">
+              Contribute your data to help build this dataset.
+            </div>
+          </div>
+        ) : (
+          <button
+            onClick={() => void handlePurchase()}
+            disabled={purchasing}
+            className="w-full py-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-medium text-sm transition-colors disabled:opacity-50"
+          >
+            {purchasing ? (
+              <span className="inline-flex items-center gap-2">
+                Processing <LoadingDots />
+              </span>
+            ) : (
+              `Purchase for ${formatUsdc(priceUsdc)} USDC`
+            )}
+          </button>
+        )}
 
         {isOwner && (
-          <div className="space-y-3">
-            <div className="text-center text-xs text-zinc-500 py-2">
-              This is your {type}. You cannot purchase your own data.
-            </div>
-            <button
-              onClick={() => void handleDelete()}
-              disabled={deleteLoading}
-              className="w-full py-2.5 rounded-xl border border-red-500/30 text-red-400 hover:bg-red-500/10 text-sm font-medium transition-colors disabled:opacity-50"
-            >
-              {deleteLoading ? (
-                <span className="inline-flex items-center gap-2">
-                  Deleting <LoadingDots />
-                </span>
-              ) : (
-                `Delete ${type === "dataset" ? "Dataset" : "Listing"}`
-              )}
-            </button>
-          </div>
+          <button
+            onClick={() => void handleDelete()}
+            disabled={deleteLoading}
+            className="w-full py-2.5 rounded-xl border border-red-500/30 text-red-400 hover:bg-red-500/10 text-sm font-medium transition-colors disabled:opacity-50"
+          >
+            {deleteLoading ? (
+              <span className="inline-flex items-center gap-2">
+                Deleting <LoadingDots />
+              </span>
+            ) : (
+              `Delete ${type === "dataset" ? "Dataset" : "Listing"}`
+            )}
+          </button>
         )}
       </div>
     </div>

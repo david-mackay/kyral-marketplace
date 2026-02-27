@@ -54,13 +54,6 @@ export async function POST(req: NextRequest) {
           { status: 404 }
         );
       }
-      if (dataset.creatorUserId === user.id) {
-        return NextResponse.json(
-          { error: "Cannot purchase your own dataset" },
-          { status: 400 }
-        );
-      }
-
       const contributions = await db.query.datasetContributions.findMany({
         where: and(
           eq(datasetContributions.datasetId, targetId),

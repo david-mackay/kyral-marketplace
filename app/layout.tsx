@@ -15,9 +15,9 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Kyral Marketplace",
+  title: "Kyral | Health Data Waitlist",
   description:
-    "Decentralized health data marketplace on Solana. Own, lend, and invest your health data.",
+    "Join the private waitlist for Kyral, the consent-first market for human health data.",
 };
 
 export default function RootLayout({

@@ -17,12 +17,12 @@ function getInitialPopulation(): number {
 }
 
 export function GlobalPopulationCounter() {
-  const [population, setPopulation] = useState<number | null>(null);
+  const [population, setPopulation] = useState(() =>
+    Math.floor(getInitialPopulation())
+  );
 
   useEffect(() => {
     const initial = getInitialPopulation();
-    setPopulation(initial);
-
     const startTime = Date.now();
 
     const interval = setInterval(() => {
@@ -33,14 +33,6 @@ export function GlobalPopulationCounter() {
 
     return () => clearInterval(interval);
   }, []);
-
-  if (population === null) {
-    return (
-      <div className="text-5xl sm:text-6xl lg:text-7xl xl:text-8xl font-mono font-bold tabular-nums text-zinc-500">
-        {BASE_POPULATION.toLocaleString()}
-      </div>
-    );
-  }
 
   return (
     <div className="text-5xl sm:text-6xl lg:text-7xl xl:text-8xl font-mono font-bold tabular-nums text-zinc-100">

@@ -86,6 +86,23 @@ export const users = pgTable(
   })
 );
 
+// ─── Waitlist ────────────────────────────────────────────────────────────────
+
+export const waitlistSignups = pgTable(
+  "waitlist_signups",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    email: text("email").notNull(),
+    persona: text("persona"),
+    source: text("source").notNull().default("landing_page"),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  },
+  (table) => ({
+    emailIdx: uniqueIndex("waitlist_signups_email_unique").on(table.email),
+  })
+);
+
 // ─── Documents ───────────────────────────────────────────────────────────────
 
 export const documents = pgTable(
@@ -328,3 +345,4 @@ export type Dataset = typeof datasets.$inferSelect;
 export type DatasetContribution = typeof datasetContributions.$inferSelect;
 export type Purchase = typeof purchases.$inferSelect;
 export type RevenueEvent = typeof revenueEvents.$inferSelect;
+export type WaitlistSignup = typeof waitlistSignups.$inferSelect;

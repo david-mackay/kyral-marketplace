@@ -3,7 +3,7 @@ import { z } from "zod";
 import type { ColumnProfile, DataProfile } from "@/lib/data-profile";
 import { chatJson, hasOpenRouter } from "@/server/bioagents/openrouter";
 import { estimateValueUsdc } from "./pricing";
-import { extractWithReducto, hasReducto } from "./reducto";
+import { extractWithReducto, hasReducto, redactNarrativeWithReducto } from "./reducto";
 import { parseCsv, profileAndDeidentify, toCsv } from "./tabular";
 
 const CATEGORIES = [
@@ -82,8 +82,11 @@ function baseName(fileName: string) {
   return fileName.replace(/\.[^.]+$/, "").replace(/[^\w-]+/g, "_").slice(0, 60) || "data";
 }
 
+const narrativeRedactor = () => (hasReducto() ? redactNarrativeWithReducto : undefined);
+
 async function analyzeTable(text: string, fileName: string, delimiter: string, dateShiftDays: number): Promise<IntakeResult> {
-  const table = profileAndDeidentify(parseCsv(text, delimiter), dateShiftDays);
+  const table = await profileAndDeidentify(parseCsv(text, delimiter), dateShiftDays, narrativeRedactor());
+  const unsafe = table.residualFindings.length > 0;
   const context = [
     `File: ${fileName}`,
     `Rows: ${table.rowCount}`,
@@ -91,11 +94,15 @@ async function analyzeTable(text: string, fileName: string, delimiter: string, d
     `Columns: ${table.columns.map((c) => `${c.name} (${c.type}${c.unit ? `, ${c.unit}` : ""})`).join("; ")}`,
     `Sample rows: ${JSON.stringify(table.sampleRows.slice(0, 3))}`,
   ].join("\n");
-  const { result, usedLlm } = await classify(fileName, context, table.columns);
+  // Only de-identified content may reach the classifier.
+  const { result, usedLlm } = unsafe
+    ? { result: heuristicClassification(fileName, table.columns), usedLlm: false }
+    : await classify(fileName, context, table.columns);
 
   const days = spanDays(table.dateRange);
   const profile: DataProfile = {
     ...result,
+    ...(unsafe && { summary: `Kept private: we found ${table.residualFindings.join(", ")} we couldn't safely remove.` }),
     source: "spreadsheet",
     columns: table.columns,
     rowCount: table.rowCount,
@@ -109,11 +116,13 @@ async function analyzeTable(text: string, fileName: string, delimiter: string, d
 
   return {
     profile,
-    deidentified: {
-      body: Buffer.from(table.deidentifiedCsv, "utf8"),
-      contentType: "text/csv",
-      fileName: `${baseName(fileName)}_deidentified.csv`,
-    },
+    deidentified: unsafe
+      ? null
+      : {
+          body: Buffer.from(table.deidentifiedCsv, "utf8"),
+          contentType: "text/csv",
+          fileName: `${baseName(fileName)}_deidentified.csv`,
+        },
   };
 }
 
@@ -126,7 +135,7 @@ async function analyzeDocument(file: Buffer, fileName: string, dateShiftDays: nu
     ["measurement", "value", "unit", "reference_range", "date"],
     ...x.measurements.map((m) => [m.name, m.value, m.unit ?? "", m.referenceRange ?? "", m.date ?? ""]),
   ];
-  const table = profileAndDeidentify(parseCsv(toCsv(rows)), dateShiftDays);
+  const table = await profileAndDeidentify(parseCsv(toCsv(rows)), dateShiftDays, narrativeRedactor());
   const days = spanDays(table.dateRange);
 
   const tags = [
@@ -158,7 +167,7 @@ async function analyzeDocument(file: Buffer, fileName: string, dateShiftDays: nu
   return {
     profile,
     deidentified:
-      table.rowCount > 0
+      table.rowCount > 0 && table.residualFindings.length === 0
         ? {
             body: Buffer.from(table.deidentifiedCsv, "utf8"),
             contentType: "text/csv",

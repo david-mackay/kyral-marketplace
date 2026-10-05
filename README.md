@@ -5,7 +5,12 @@ A health-data marketplace on Monad, run as a service for patients: **upload once
 ## How it works
 
 1. **Upload.** Patients drop in CSVs, lab PDFs, or wearable exports (`/upload`).
-2. **Understand and de-identify.** The intake agent (`server/intake/`) works out what the file is (Reducto for PDFs and images, OpenRouter for classification, heuristics as a fallback). It drops identifier columns, scrubs names, emails, phone numbers, MRNs and addresses from free text, shifts every date by a per-person offset, and buckets ages over 89. Buyers only ever receive this de-identified copy, and its SHA-256 is what gets anchored onchain.
+2. **Understand and de-identify.** The intake agent (`server/intake/`) works out what the file is and produces a de-identified copy. Buyers only ever receive that copy, and its SHA-256 is what gets anchored onchain.
+   - Identifier columns are dropped (names, birth dates, IDs, contact details, locations, care team, facilities), matched on normalized headers.
+   - Every date is shifted by a per-person offset, in any common format and inside free text. Unreadable values in date columns are blanked rather than passed through. Ages over 89 become "90+".
+   - Free text is scrubbed by pattern (emails, phones, SSNs, MRNs, addresses, URLs). Then Reducto, which is HIPAA-covered, finds names, places, and organizations in notes, and they're replaced locally. Without Reducto, note columns are dropped. Values from dropped identifier columns, such as the patient's own name, are removed wherever else they appear.
+   - A final scan blocks sharing if anything identifier-like remains. Only de-identified rows ever reach the OpenRouter classifier, and Reducto uploads and jobs are deleted after use.
+   - `npm test` covers this with a deliberately messy fixture.
 3. **Price and list.** A pricing model (category, depth, history, richness) sets a starting price, and the data is listed automatically. Patients can edit or pause it.
 4. **Match to requests.** Researchers post requests (`/requests/new`) with criteria, a purpose, and a reward per person, and escrow the full budget in the contract. Matching data from people who consented to that purpose (academic, nonprofit, commercial, pharma) fills each slot. The operator calls `fillBounty`, which pays the contributor from escrow and grants the researcher access.
 5. **Get paid.** `/earn` shows earnings in dollars, a live activity feed ("your sleep log joined a Stanford study"), consent settings, and opportunities you'd qualify for if you opted in. Withdrawals are relayed, so users never need gas.

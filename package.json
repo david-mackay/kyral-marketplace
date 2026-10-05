@@ -14,7 +14,8 @@
     "contracts:abi": "node scripts/gen-abi.mjs",
     "contracts:test": "cd contracts && forge test -vv",
     "contracts:deploy": "cd contracts && forge script script/Deploy.s.sol --rpc-url ${MONAD_RPC_URL:-https://testnet-rpc.monad.xyz} --broadcast",
-    "seed:demo": "tsx --env-file=.env scripts/seed-demo.ts"
+    "seed:demo": "tsx --env-file=.env scripts/seed-demo.ts",
+    "test": "tsx --test \"server/**/*.test.ts\""
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.990.0",

@@ -66,7 +66,9 @@ export const reownAppKit = createAppKit({
   features: {
     email: true,
     socials: ["google", "apple"],
+    analytics: false,
   },
+  enableCoinbase: false,
 });
 
 const queryClient = new QueryClient();

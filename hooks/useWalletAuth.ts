@@ -29,6 +29,10 @@ const initialState: AuthState = {
   error: null,
 };
 
+// Several components mount this hook at once; they must share one signature
+// prompt, or the wallet receives concurrent personal_sign requests.
+let pendingSignIn: { wallet: string; promise: Promise<AuthUser> } | null = null;
+
 export function useWalletAuth() {
   const { address, isConnected } = useAppKitAccount();
   const { signMessageAsync } = useSignMessage();
@@ -100,42 +104,37 @@ export function useWalletAuth() {
       setState((prev) => ({ ...prev, status: "authenticating", error: null }));
 
       try {
-        // 1. Get challenge
-        const nonceRes = await fetch("/api/auth/nonce", { cache: "no-store" });
-        if (!nonceRes.ok) throw new Error("Failed to get auth challenge");
-        const { message } = (await nonceRes.json()) as { message: string };
+        if (pendingSignIn?.wallet.toLowerCase() !== wallet.toLowerCase()) {
+          const promise = (async () => {
+            const nonceRes = await fetch("/api/auth/nonce", { cache: "no-store" });
+            if (!nonceRes.ok) throw new Error("Failed to get auth challenge");
+            const { message } = (await nonceRes.json()) as { message: string };
 
-        // 2. Sign with wallet (single signature prompt)
-        const signature = await signMessageAsync({
-          account: wallet as Address,
-          message,
-        });
+            const signature = await signMessageAsync({ account: wallet as Address, message });
 
-        // 3. Verify on server and create session
-
-        const res = await fetch("/api/auth/session", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          credentials: "same-origin",
-          body: JSON.stringify({
-            walletAddress: wallet,
-            message,
-            signature,
-          }),
-        });
-
-        if (!res.ok) {
-          const errorBody = await res.json().catch(() => ({}));
-          throw new Error(
-            (errorBody as { error?: string }).error || "Failed to create session"
-          );
+            const res = await fetch("/api/auth/session", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              credentials: "same-origin",
+              body: JSON.stringify({ walletAddress: wallet, message, signature }),
+            });
+            if (!res.ok) {
+              const errorBody = await res.json().catch(() => ({}));
+              throw new Error((errorBody as { error?: string }).error || "Failed to create session");
+            }
+            const data = (await res.json()) as { ok: boolean; user: AuthUser };
+            if (!data.ok || !data.user) throw new Error("Failed to create session");
+            return data.user;
+          })();
+          pendingSignIn = { wallet, promise };
+          void promise.finally(() => {
+            if (pendingSignIn?.promise === promise) pendingSignIn = null;
+          }).catch(() => {});
         }
-
-        const data = (await res.json()) as { ok: boolean; user: AuthUser };
-        if (!data.ok || !data.user) throw new Error("Failed to create session");
+        const user = await pendingSignIn!.promise;
 
         hasAttemptedForAddressRef.current = wallet;
-        setState({ status: "authenticated", user: data.user });
+        setState({ status: "authenticated", user });
       } catch (error) {
         console.error("Authentication failed", error);
         setState({

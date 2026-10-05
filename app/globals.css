@@ -185,6 +185,32 @@ body {
   pointer-events: none;
 }
 
+.btn-text {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: #6ee7b7;
+}
+.btn-text:hover {
+  color: #a7f3d0;
+}
+.btn-text:disabled {
+  opacity: 0.5;
+  pointer-events: none;
+}
+
+/* Sizes apply to .btn-liquid and .btn-ghost. Default is md. */
+.btn-sm {
+  padding: 0.375rem 0.875rem;
+  font-size: 0.8125rem;
+}
+.btn-lg {
+  padding: 0.875rem 2rem;
+  font-size: 0.9375rem;
+}
+
 .field {
   width: 100%;
   border-radius: 16px;

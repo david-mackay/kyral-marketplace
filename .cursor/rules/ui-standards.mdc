@@ -1,0 +1,46 @@
+---
+description: Kyral UI standards (liquid glass, button hierarchy, layout, copy). Based on Apple HIG, Nielsen's heuristics, and WCAG 2.2.
+globs: **/*.tsx
+alwaysApply: false
+---
+
+# Kyral UI standards
+
+Primitives live in `app/globals.css` and `components/ui.tsx`. Use them; don't restyle per page.
+
+## Buttons
+- One `btn-liquid` (primary) per view region, for the main action of that region only.
+- `btn-ghost` for secondary actions. `btn-text` for low-emphasis actions and links in UI chrome.
+- Sizes: default, `btn-sm` (section headers, rows, nav), `btn-lg` (landing and hero CTAs). Never `!py-*` / `!text-*` overrides.
+- Destructive actions are quiet (`text-xs text-zinc-500 hover:text-red-300`) and always `confirm()`.
+- Labels are verbs that say what happens: "Withdraw", "Fund & publish", not "Submit" or "OK".
+- Pending state replaces the label ("Sending…") and disables the button.
+
+```tsx
+// ❌ unrelated actions grouped, ad-hoc sizing
+<button className="btn-liquid">Withdraw</button>
+<Link href="/upload" className="btn-ghost !py-1.5 !text-xs">Add more data</Link>
+
+// ✅ each action lives with the content it acts on
+<Sheet title="Your data" action={<Link href="/upload" className="btn-ghost btn-sm">Add data</Link>}>
+```
+
+## Layout
+- Group actions with the content they affect. Money actions stay with balances, data actions with data.
+- No cards. Content is rows (`divide-hairline`) inside a `Sheet` / `.glass` surface.
+- Page header: `text-4xl font-semibold tracking-tight` title, one line of `text-zinc-400` context.
+- Section header: `Sheet` `title` plus an optional single `action` on the right.
+- Section labels use `.eyebrow`; headline numbers use `.num-display`; metadata uses `.chip`.
+
+## States
+- Every async view has loading (`SkeletonRows`), empty (one sentence plus the next step), and error states.
+- Errors say what happened and what to do, in plain words. Map wallet/RPC errors to friendly text.
+
+## Copy and crypto
+- Amounts in dollars via `<Money>`. Don't say USDC, gas, wallet, or tx in patient-facing copy.
+- Onchain proof is a small `<VerifyLink>`, never a primary element.
+
+## Accessibility (WCAG 2.2 AA)
+- Interactive elements are `<button>` or `<Link>`, never clickable `<div>`s.
+- Text contrast at least 4.5:1 (`text-zinc-500` is the floor on glass); hit targets at least 24px.
+- Inputs have a visible `<label>`; toggles expose their state in text or `aria-pressed`.

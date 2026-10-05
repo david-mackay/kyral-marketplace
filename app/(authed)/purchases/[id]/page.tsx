@@ -141,7 +141,7 @@ export default function PurchaseDetailPage() {
                   <div className="text-xs text-zinc-500 mt-0.5">{formatFileSize(f.sizeBytes)}</div>
                 </div>
                 {f.downloadUrl ? (
-                  <a href={f.downloadUrl} target="_blank" rel="noreferrer" download={f.fileName} className="btn-ghost !py-1.5 !text-xs">
+                  <a href={f.downloadUrl} target="_blank" rel="noreferrer" download={f.fileName} className="btn-ghost btn-sm">
                     Download
                   </a>
                 ) : (

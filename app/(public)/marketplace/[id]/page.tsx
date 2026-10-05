@@ -269,14 +269,14 @@ export default function MarketplaceDetailPage() {
                           key={l.id}
                           onClick={() => void contribute(l.id, "POST")}
                           disabled={busyListing !== null}
-                          className="btn-ghost !py-1.5 !text-xs"
+                          className="btn-ghost btn-sm"
                         >
                           + {l.title}
                         </button>
                       ))}
                     </div>
                   ) : (
-                    <Link href="/upload" className="text-sm text-emerald-300 hover:underline">Add data to contribute →</Link>
+                    <Link href="/upload" className="btn-text">Add data to contribute →</Link>
                   )}
                 </div>
               )}
@@ -300,7 +300,7 @@ export default function MarketplaceDetailPage() {
             <div className="space-y-3">
               <div className="text-emerald-300 text-sm">Purchased. It&apos;s in your library.</div>
               <div className="flex items-center gap-3">
-                <Link href="/purchases" className="btn-liquid !py-2">Open library</Link>
+                <Link href="/purchases" className="btn-liquid btn-sm">Open library</Link>
                 <VerifyLink txHash={purchaseTx} />
               </div>
             </div>

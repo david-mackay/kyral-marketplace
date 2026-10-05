@@ -47,8 +47,8 @@ export default function HomePage() {
           Upload your records once. Kyral de-identifies them, prices them, and sells them to research you approve.
         </p>
         <div className="mt-10 flex flex-col sm:flex-row gap-3">
-          <Link href="/upload" className="btn-liquid !px-8 !py-3">Start earning</Link>
-          <Link href="/requests" className="btn-ghost !px-6 !py-3">I&apos;m a researcher</Link>
+          <Link href="/upload" className="btn-liquid btn-lg">Start earning</Link>
+          <Link href="/requests" className="btn-ghost btn-lg">I&apos;m a researcher</Link>
         </div>
       </section>
 
@@ -105,7 +105,7 @@ export default function HomePage() {
         <p className="mt-4 text-zinc-400 max-w-md mx-auto">
           Sign in with email. Upload a file. We&apos;ll show you an estimate in under a minute.
         </p>
-        <Link href="/upload" className="btn-liquid !px-10 !py-3 mt-8">Get started</Link>
+        <Link href="/upload" className="btn-liquid btn-lg mt-8">Get started</Link>
         <p className="mt-6 text-[11px] text-zinc-500">Payments and data fingerprints are publicly verifiable on Monad.</p>
       </section>
     </div>

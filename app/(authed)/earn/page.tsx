@@ -140,11 +140,10 @@ export default function EarnPage() {
           <div className="num-display text-7xl sm:text-8xl lg:text-9xl">
             <Money usdc={data.availableUsdc} />
           </div>
-          <div className="flex items-center gap-3 pb-2">
+          <div className="pb-2">
             <button onClick={() => void withdraw()} disabled={withdrawing || data.availableUsdc === 0} className="btn-liquid">
               {withdrawing ? "Sending…" : "Withdraw"}
             </button>
-            <Link href="/upload" className="btn-ghost">Add more data</Link>
           </div>
         </div>
         <div className="mt-5 flex flex-wrap gap-x-8 gap-y-2 text-sm text-zinc-400">
@@ -225,6 +224,7 @@ export default function EarnPage() {
                   key={p}
                   onClick={() => togglePurpose(p)}
                   disabled={savingConsent}
+                  aria-pressed={on}
                   className="w-full flex items-center justify-between rounded-2xl px-4 py-3 text-sm hover:bg-white/5 transition-colors"
                 >
                   <span className={on ? "text-zinc-100" : "text-zinc-500"}>{PURPOSE_LABELS[p]}</span>
@@ -237,6 +237,7 @@ export default function EarnPage() {
             <button
               onClick={() => void updateSettings({ autoFill: !data.settings.autoFill })}
               disabled={savingConsent}
+              aria-pressed={data.settings.autoFill}
               className="w-full flex items-center justify-between rounded-2xl px-4 py-3 text-sm hover:bg-white/5"
             >
               <span className="text-left">
@@ -256,7 +257,7 @@ export default function EarnPage() {
       {/* Your data */}
       <Sheet
         title="Your data"
-        action={<Link href="/upload" className="text-xs text-emerald-300 hover:underline">Add data</Link>}
+        action={<Link href="/upload" className="btn-ghost btn-sm">Add data</Link>}
       >
         {data.data.length === 0 ? (
           <p className="text-sm text-zinc-500">No files yet.</p>
@@ -364,7 +365,7 @@ function DataRow({ row, onChanged }: { row: EarnData["data"][number]; onChanged:
                 inputMode="decimal"
                 autoFocus
               />
-              <button className="btn-ghost !py-1.5 !px-3 !text-xs" onClick={() => void savePrice()}>Save</button>
+              <button className="btn-ghost btn-sm" onClick={() => void savePrice()}>Save</button>
             </>
           ) : (
             <button onClick={() => setEditing(true)} className="text-right" title="Change price">

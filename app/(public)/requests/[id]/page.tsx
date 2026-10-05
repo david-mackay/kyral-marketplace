@@ -110,7 +110,7 @@ export default function RequestDetailPage() {
               title={`Contributions (${contributions.length})`}
               action={
                 contributions.length > 0 && (
-                  <a href={`/api/bounties/${id}/download`} className="btn-ghost !py-1.5 !text-xs">Download all</a>
+                  <a href={`/api/bounties/${id}/download`} className="btn-ghost btn-sm">Download all</a>
                 )
               }
             >

@@ -59,13 +59,13 @@ export function Navbar() {
         <div className="flex items-center gap-2">
           {isAuthenticated ? (
             <>
-              <Link href="/upload" className="btn-liquid !py-1.5 !px-4 !text-[13px]">
+              <Link href="/upload" className="btn-liquid btn-sm">
                 Add data
               </Link>
               <div className="relative">
                 <button
                   onClick={() => setMenuOpen((o) => !o)}
-                  className="btn-ghost !py-1.5 !px-3 !text-[13px] max-w-[180px]"
+                  className="btn-ghost btn-sm max-w-[180px]"
                 >
                   <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 shrink-0" />
                   <span className="truncate">{accountLabel}</span>
@@ -93,7 +93,7 @@ export function Navbar() {
             </>
           ) : (
             pathname !== "/auth" && (
-              <Link href="/auth" className="btn-liquid !py-1.5 !px-4 !text-[13px]">
+              <Link href="/auth" className="btn-liquid btn-sm">
                 Sign in
               </Link>
             )

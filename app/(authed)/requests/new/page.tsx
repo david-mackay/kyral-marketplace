@@ -12,6 +12,9 @@ import { USDC_HAS_FAUCET } from "@/lib/chain";
 import { CONSENT_PURPOSES, PURPOSE_LABELS, type ConsentPurpose } from "@/lib/data-profile";
 import { CATEGORY_LABELS, DATA_CATEGORIES, formatUsdc } from "@/lib/format";
 import { fundBounty, type BountyFunding } from "@/lib/purchase";
+import { SIGNALS, detectSignals, type Signal } from "@/lib/signals";
+
+const SIGNAL_GROUPS = [...SIGNALS.reduce((m, s) => m.set(s.category, [...(m.get(s.category) ?? []), s]), new Map<string, Signal[]>())];
 
 const SPAN_OPTIONS = [
   { days: 0, label: "Any" },
@@ -42,7 +45,7 @@ export default function NewRequestPage() {
   const [description, setDescription] = useState("");
   const [purpose, setPurpose] = useState<ConsentPurpose>("academic");
   const [categories, setCategories] = useState<string[]>([]);
-  const [signals, setSignals] = useState("");
+  const [signals, setSignals] = useState<string[]>([]);
   const [minRows, setMinRows] = useState(0);
   const [minSpanDays, setMinSpanDays] = useState(0);
   const [reward, setReward] = useState("10");
@@ -73,7 +76,9 @@ export default function NewRequestPage() {
       setTitle(p.title);
       setDescription(`${p.description}\n\n${p.scientificValue}`.trim());
       if (DATA_CATEGORIES.includes(p.category)) setCategories([p.category]);
-      setSignals([...(p.suggestedBiomarkers ?? []), ...(p.dataRequirements ?? [])].slice(0, 5).join(", "));
+      const picked = detectSignals(p.suggestedBiomarkers ?? []);
+      const implied = detectSignals(p.dataRequirements ?? []).filter((id) => !picked.includes(id));
+      setSignals([...picked, ...implied].slice(0, 5));
       if (p.suggestedPriceUsdc) setReward(String(Math.max(1, Math.round(p.suggestedPriceUsdc / 2))));
     } catch (e) {
       setError(e instanceof Error ? e.message : "Planner unavailable");
@@ -96,7 +101,7 @@ export default function NewRequestPage() {
           purpose,
           criteria: {
             categories,
-            requiredSignals: signals.split(",").map((s) => s.trim()).filter(Boolean).slice(0, 10),
+            requiredSignals: signals,
             minRows,
             minSpanDays,
           },
@@ -136,6 +141,8 @@ export default function NewRequestPage() {
 
   const toggleCategory = (c: string) =>
     setCategories((prev) => (prev.includes(c) ? prev.filter((x) => x !== c) : [...prev, c]));
+  const toggleSignal = (id: string) =>
+    setSignals((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : prev.length < 10 ? [...prev, id] : prev));
 
   const valid = title.trim().length >= 3 && rewardCents >= 10 && max >= 1;
 
@@ -194,16 +201,35 @@ export default function NewRequestPage() {
                   type="button"
                   key={c}
                   onClick={() => toggleCategory(c)}
-                  className={`chip !py-1.5 !px-3 transition-colors ${categories.includes(c) ? "!bg-emerald-400/15 !text-emerald-200 !border-emerald-300/30" : ""}`}
+                  aria-pressed={categories.includes(c)}
+                  className="chip-toggle"
                 >
                   {CATEGORY_LABELS[c]}
                 </button>
               ))}
             </div>
             <div className="grid sm:grid-cols-3 gap-5">
-              <Field label="Must include (comma separated)" className="sm:col-span-3">
-                <input className="field" value={signals} onChange={(e) => setSignals(e.target.value)} placeholder="heart rate, HbA1c" />
-              </Field>
+              <div className="sm:col-span-3">
+                <span className="block text-xs text-zinc-400 mb-2">Must include</span>
+                <div className="space-y-2.5">
+                  {SIGNAL_GROUPS.map(([category, group]) => (
+                    <div key={category} className="flex flex-wrap items-center gap-1.5">
+                      <span className="w-24 shrink-0 text-[11px] text-zinc-500">{CATEGORY_LABELS[category] ?? "Other"}</span>
+                      {group.map((sig) => (
+                        <button
+                          type="button"
+                          key={sig.id}
+                          onClick={() => toggleSignal(sig.id)}
+                          aria-pressed={signals.includes(sig.id)}
+                          className="chip-toggle"
+                        >
+                          {sig.label}
+                        </button>
+                      ))}
+                    </div>
+                  ))}
+                </div>
+              </div>
               <Field label="History">
                 <select className="field" value={minSpanDays} onChange={(e) => setMinSpanDays(Number(e.target.value))}>
                   {SPAN_OPTIONS.map((o) => (

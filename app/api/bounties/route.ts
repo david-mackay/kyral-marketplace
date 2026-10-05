@@ -5,6 +5,7 @@ import { z } from "zod";
 import { CONSENT_PURPOSES } from "@/lib/data-profile";
 import { bountyIdFor, MARKETPLACE_ADDRESS, USDC_ADDRESS } from "@/lib/chain";
 import { DATA_CATEGORIES } from "@/lib/format";
+import { SIGNAL_IDS } from "@/lib/signals";
 import { requireAuthenticatedUser } from "@/server/auth/session";
 import { db } from "@/server/db";
 import { bounties } from "@/server/db/schema";
@@ -19,7 +20,7 @@ const CreateBountySchema = z.object({
   purpose: z.enum(CONSENT_PURPOSES),
   criteria: z.object({
     categories: z.array(z.string().refine((c) => DATA_CATEGORIES.includes(c))).max(10),
-    requiredSignals: z.array(z.string().min(1).max(40)).max(10),
+    requiredSignals: z.array(z.string().refine((id) => SIGNAL_IDS.has(id), "Unknown signal")).max(10),
     minRows: z.number().int().min(0).max(100_000),
     minSpanDays: z.number().int().min(0).max(3650),
   }),

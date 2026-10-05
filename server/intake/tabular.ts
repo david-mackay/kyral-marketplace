@@ -139,6 +139,8 @@ function parseNumber(value: string): number | null {
 const UNIT_SUFFIX = /_(mmhg|bpm|ms|mg_?dl|mmol_?l|kg|lbs?|cm|hrs?|mins?|minutes|liters|units|pct|percent|1_10|1_5)$/i;
 const AGE_COLUMN = /(^|_)age($|_)/;
 
+const MAX_CATEGORICAL_VALUES = 300;
+
 /** Share of non-empty values that must parse for a column to count as dates. */
 const DATE_COLUMN_THRESHOLD = 0.8;
 
@@ -164,6 +166,8 @@ export interface TabularResult {
   sampleRows: Record<string, string>[];
   /** Identifier-like content still present after scrubbing. Non-empty means don't share. */
   residualFindings: string[];
+  /** Distinct de-identified values of category-like text columns (e.g. lab test names). */
+  categoricalValues: string[];
 }
 
 function escapeRegExp(s: string) {
@@ -206,7 +210,7 @@ export async function profileAndDeidentify(
   });
 
   type Kind = "date" | "number" | "text" | "narrative";
-  const kinds: Kind[] = [];
+  let kinds: Kind[] = [];
   let columns: ColumnProfile[] = keep.map((i) => {
     const name = header[i]!.trim();
     const values = body.map((r) => (r[i] ?? "").trim()).filter((v) => v !== "");
@@ -308,9 +312,17 @@ export async function profileAndDeidentify(
       deidRows = deidRows.map((r) => r.filter((_, c) => !drop.has(c)));
       columns = columns.filter((_, c) => !drop.has(c));
       keep = keep.filter((_, c) => !drop.has(c));
+      kinds = kinds.filter((_, c) => !drop.has(c));
       removed.add("free-text notes");
     }
   }
+
+  const categoricalValues = new Set<string>();
+  kinds.forEach((k, c) => {
+    if (k !== "text") return;
+    const distinct = new Set(deidRows.map((r) => r[c]!).filter((v) => v && v.length <= 80));
+    if (distinct.size <= MAX_CATEGORICAL_VALUES) distinct.forEach((v) => categoricalValues.add(v));
+  });
 
   const keptHeader = keep.map((i) => header[i]!.trim());
   const deidentifiedCsv = toCsv([keptHeader, ...deidRows]);
@@ -324,6 +336,7 @@ export async function profileAndDeidentify(
     deidentifiedCsv,
     sampleRows: deidRows.slice(0, 5).map((r) => Object.fromEntries(keptHeader.map((h, i) => [h, r[i] ?? ""]))),
     residualFindings: residualScan(keptHeader, deidRows, identifierPattern),
+    categoricalValues: [...categoricalValues],
   };
 }
 

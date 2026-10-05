@@ -31,6 +31,7 @@ Primitives live in `app/globals.css` and `components/ui.tsx`. Use them; don't re
 - Page header: `text-4xl font-semibold tracking-tight` title, one line of `text-zinc-400` context.
 - Section header: `Sheet` `title` plus an optional single `action` on the right.
 - Section labels use `.eyebrow`; headline numbers use `.num-display`; metadata uses `.chip`.
+- Selectable options use `.chip-toggle` with `aria-pressed`; never style selection with `!` overrides.
 
 ## States
 - Every async view has loading (`SkeletonRows`), empty (one sentence plus the next step), and error states.

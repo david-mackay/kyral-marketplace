@@ -5,6 +5,9 @@ export interface DataProfile {
   category: string;
   documentType: string;
   source: "spreadsheet" | "document";
+  /** Ids from `lib/signals.ts`. Missing on profiles created before the vocabulary existed. */
+  signals?: string[];
+  /** Display labels for `signals`. */
   tags: string[];
   columns: ColumnProfile[];
   rowCount: number;
@@ -40,7 +43,7 @@ export const PURPOSE_LABELS: Record<ConsentPurpose, string> = {
 
 export interface BountyCriteria {
   categories: string[];
-  /** Keywords that must appear in the data's columns or tags, e.g. "hrv". */
+  /** Signal ids from `lib/signals.ts` the data must contain, e.g. "hba1c". */
   requiredSignals: string[];
   minRows: number;
   minSpanDays: number;

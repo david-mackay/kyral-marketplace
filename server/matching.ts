@@ -1,9 +1,10 @@
 import { and, eq, isNotNull, lt, ne, sql } from "drizzle-orm";
 import { zeroHash, type Hex } from "viem";
 
-import type { BountyCriteria, DataProfile } from "@/lib/data-profile";
+import type { DataProfile } from "@/lib/data-profile";
 import { formatUsdc } from "@/lib/format";
 import { recordActivity } from "@/server/activity";
+import { matchesCriteria } from "@/server/criteria";
 import { db } from "@/server/db";
 import {
   bounties,
@@ -15,22 +16,6 @@ import {
   type User,
 } from "@/server/db/schema";
 import { fillBountyOnchain } from "@/server/monad/bounties";
-
-const normalize = (s: string) => s.toLowerCase().replace(/[_\-]+/g, " ");
-
-/** Does this data satisfy what the researcher asked for? */
-export function matchesCriteria(criteria: BountyCriteria, profile: DataProfile): boolean {
-  if (criteria.categories.length > 0 && !criteria.categories.includes(profile.category)) {
-    return false;
-  }
-  if (profile.rowCount < criteria.minRows || profile.spanDays < criteria.minSpanDays) {
-    return false;
-  }
-  const haystack = normalize(
-    [profile.title, profile.summary, profile.documentType, ...profile.tags, ...profile.columns.map((c) => c.name)].join(" ")
-  );
-  return criteria.requiredSignals.every((signal) => haystack.includes(normalize(signal)));
-}
 
 type ShareableDoc = Document & { profile: DataProfile };
 

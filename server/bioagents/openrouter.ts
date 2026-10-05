@@ -1,6 +1,8 @@
 import { z } from "zod";
+import { SIGNALS } from "@/lib/signals";
 
 const OPENROUTER_API_URL = "https://openrouter.ai/api/v1/chat/completions";
+const MODEL = process.env.OPENROUTER_MODEL ?? "google/gemini-3.8-flash";
 
 function getApiKey(): string {
   const key = process.env.OPENROUTER_API_KEY;
@@ -46,7 +48,7 @@ You MUST respond with valid JSON matching this exact schema (no markdown, no cod
   "dataRequirements": ["list of specific data fields/types contributors should include"],
   "targetDemographics": ["who should contribute — age ranges, conditions, etc."],
   "scientificValue": "1-2 sentences on why this data matters to science",
-  "suggestedBiomarkers": ["specific biomarkers or measurements relevant to this study"],
+  "suggestedBiomarkers": ["up to 5 measurements, chosen only from: ${SIGNALS.map((sig) => sig.label).join(", ")}"],
   "estimatedSampleSize": "recommended minimum sample size with brief justification"
 }
 
@@ -55,39 +57,6 @@ Guidelines:
 - Suggest realistic prices based on data sensitivity and collection burden
 - Always consider participant privacy
 - Focus on data that individuals would plausibly have (lab results, wearable exports, vitals, etc.)`;
-
-export function hasOpenRouter() {
-  return !!process.env.OPENROUTER_API_KEY;
-}
-
-/** Single-turn chat that must return a JSON object. */
-export async function chatJson(system: string, user: string, maxTokens = 1200): Promise<unknown> {
-  const response = await fetch(OPENROUTER_API_URL, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${getApiKey()}`,
-      "Content-Type": "application/json",
-      "HTTP-Referer": "https://kyral.xyz",
-      "X-Title": "Kyral Marketplace",
-    },
-    body: JSON.stringify({
-      model: "google/gemini-2.0-flash-001",
-      messages: [
-        { role: "system", content: system },
-        { role: "user", content: user },
-      ],
-      temperature: 0.2,
-      max_tokens: maxTokens,
-      response_format: { type: "json_object" },
-    }),
-  });
-  if (!response.ok) {
-    throw new Error(`OpenRouter API error (${response.status}): ${await response.text()}`);
-  }
-  const data = await response.json();
-  const content: string = data.choices?.[0]?.message?.content ?? "";
-  return JSON.parse(content.replace(/^```(?:json)?\s*/i, "").replace(/```\s*$/, "").trim());
-}
 
 export async function generateDatasetPlan(
   researchTopic: string,
@@ -101,7 +70,7 @@ export async function generateDatasetPlan(
       "X-Title": "Kyral Marketplace",
     },
     body: JSON.stringify({
-      model: "google/gemini-2.0-flash-001",
+      model: MODEL,
       messages: [
         { role: "system", content: SYSTEM_PROMPT },
         {
@@ -110,7 +79,8 @@ export async function generateDatasetPlan(
         },
       ],
       temperature: 0.7,
-      max_tokens: 1500,
+      max_tokens: 4000,
+      response_format: { type: "json_object" },
     }),
   });
 

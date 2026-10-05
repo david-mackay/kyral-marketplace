@@ -12,7 +12,7 @@ import {
   revenueEvents,
   users,
 } from "@/server/db/schema";
-import { matchesCriteria } from "@/server/matching";
+import { matchesCriteria } from "@/server/criteria";
 import { readClaimable } from "@/server/monad/marketplace";
 
 export const runtime = "nodejs";

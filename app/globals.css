@@ -201,6 +201,28 @@ body {
   pointer-events: none;
 }
 
+/* Selectable chip; state comes from aria-pressed. */
+.chip-toggle {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 9999px;
+  padding: 0.3rem 0.75rem;
+  font-size: 0.75rem;
+  color: #a1a1aa;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  transition: background 150ms, color 150ms, border-color 150ms;
+}
+.chip-toggle:hover {
+  color: #e4e4e7;
+  background: rgba(255, 255, 255, 0.08);
+}
+.chip-toggle[aria-pressed="true"] {
+  color: #a7f3d0;
+  background: rgba(52, 211, 153, 0.15);
+  border-color: rgba(110, 231, 183, 0.3);
+}
+
 /* Sizes apply to .btn-liquid and .btn-ghost. Default is md. */
 .btn-sm {
   padding: 0.375rem 0.875rem;

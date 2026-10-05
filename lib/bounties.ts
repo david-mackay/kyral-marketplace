@@ -1,6 +1,7 @@
 import { formatSpan } from "@/components/ui";
 import type { BountyCriteria } from "@/lib/data-profile";
 import { CATEGORY_LABELS } from "@/lib/format";
+import { signalLabel } from "@/lib/signals";
 
 export interface BountyRow {
   id: string;
@@ -20,7 +21,7 @@ export interface BountyRow {
 export function criteriaChips(c: BountyCriteria) {
   return [
     ...c.categories.map((x) => CATEGORY_LABELS[x] ?? x),
-    ...c.requiredSignals,
+    ...c.requiredSignals.map(signalLabel),
     ...(c.minSpanDays ? [`${formatSpan(c.minSpanDays)}+ history`] : []),
     ...(c.minRows ? [`${c.minRows}+ records`] : []),
   ];

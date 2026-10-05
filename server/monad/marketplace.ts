@@ -42,9 +42,10 @@ async function documentHashesById(documentIds: string[]) {
   if (documentIds.length === 0) return new Map<string, string | null>();
   const docs = await db.query.documents.findMany({
     where: inArray(documents.id, documentIds),
-    columns: { id: true, sha256: true },
+    columns: { id: true, sha256: true, deidSha256: true },
   });
-  return new Map(docs.map((d) => [d.id, d.sha256]));
+  // Commit to what buyers actually receive.
+  return new Map(docs.map((d) => [d.id, d.deidSha256 ?? d.sha256]));
 }
 
 async function loadListingState(id: string): Promise<ItemState | null> {

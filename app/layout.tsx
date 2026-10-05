@@ -3,6 +3,7 @@ import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { AppKitProvider } from "@/context/appkit";
 import { Navbar } from "@/components/Navbar";
+import { ActivityToasts } from "@/components/ActivityToasts";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -17,7 +18,7 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "Kyral Marketplace",
   description:
-    "Health data marketplace on Monad. Own your data, prove its provenance, and get paid onchain when it is used.",
+    "Upload your health data once. Kyral removes what identifies you, prices it, and gets you paid every time research uses it.",
 };
 
 export default function RootLayout({
@@ -30,9 +31,13 @@ export default function RootLayout({
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased min-h-screen`}
       >
+        <div className="aurora" aria-hidden>
+          <span />
+        </div>
         <AppKitProvider>
           <Navbar />
           <main>{children}</main>
+          <ActivityToasts />
         </AppKitProvider>
       </body>
     </html>

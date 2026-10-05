@@ -6,8 +6,10 @@ import { db } from "@/server/db";
 import { documents } from "@/server/db/schema";
 import { getBucketName, putObject } from "@/server/storage/s3";
 import { sha256Hex } from "@/server/monad/provenance";
+import { processUpload } from "@/server/intake/process";
 
 export const runtime = "nodejs";
+export const maxDuration = 120;
 
 function sanitizeFileName(name: string) {
   return name.replace(/[^\w.\-()+\s]/g, "_").slice(0, 120);
@@ -86,7 +88,23 @@ export async function POST(req: NextRequest) {
       throw uploadError;
     }
 
-    return NextResponse.json({ ok: true, document: created });
+    // Analysis failures leave the raw upload private rather than failing it.
+    try {
+      const result = await processUpload(user.id, created, buffer);
+      return NextResponse.json({ ok: true, ...result });
+    } catch (analysisError) {
+      console.error("Intake failed", analysisError);
+      await db
+        .update(documents)
+        .set({ status: "error" })
+        .where(eq(documents.id, created.id));
+      return NextResponse.json({
+        ok: true,
+        document: { ...created, status: "error" },
+        listing: null,
+        requestsFilled: 0,
+      });
+    }
   } catch (error) {
     if (error instanceof Error && error.message === "UNAUTHENTICATED") {
       return NextResponse.json({ error: "Unauthenticated" }, { status: 401 });

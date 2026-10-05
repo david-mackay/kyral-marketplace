@@ -37,10 +37,23 @@ contract KyralMarketplace is Ownable2Step, ReentrancyGuard {
     address public treasury;
     uint16 public feeBps;
 
+    /// A researcher's data request. Rewards are escrowed up front so a
+    /// contributor is paid the moment their data fills a slot.
+    struct Bounty {
+        address funder;
+        uint128 reward;
+        uint128 feePerFill;
+        uint32 maxFills;
+        uint32 fills;
+        bool open;
+    }
+
     mapping(bytes32 itemId => Item) private _items;
     mapping(address account => uint256) public claimable;
     mapping(bytes32 itemId => mapping(address buyer => bool)) public hasAccess;
     mapping(bytes32 purchaseRef => bool) public purchaseRefUsed;
+    mapping(bytes32 bountyId => Bounty) public bounties;
+    mapping(bytes32 bountyId => mapping(address contributor => bool)) public bountyFilledBy;
 
     event ItemUpserted(
         bytes32 indexed itemId,
@@ -61,6 +74,9 @@ contract KyralMarketplace is Ownable2Step, ReentrancyGuard {
     );
     event RevenueCredited(bytes32 indexed itemId, address indexed recipient, uint256 amount);
     event Claimed(address indexed account, uint256 amount);
+    event BountyCreated(bytes32 indexed bountyId, address indexed funder, uint128 reward, uint128 feePerFill, uint32 maxFills);
+    event BountyFilled(bytes32 indexed bountyId, address indexed contributor, uint128 reward, bytes32 dataHash);
+    event BountyClosed(bytes32 indexed bountyId, uint256 refund);
     event OperatorUpdated(address operator);
     event TreasuryUpdated(address treasury);
     event FeeUpdated(uint16 feeBps);
@@ -74,6 +90,11 @@ contract KyralMarketplace is Ownable2Step, ReentrancyGuard {
     error PriceAboveMax(uint128 price, uint128 maxPrice);
     error PurchaseRefUsed();
     error NothingToClaim();
+    error BountyExists();
+    error BountyNotOpen();
+    error BountyAlreadyFilledBy();
+    error NotBountyFunder();
+    error InvalidBounty();
 
     modifier onlyOperator() {
         if (msg.sender != operator && msg.sender != owner()) revert NotOperator();
@@ -201,6 +222,84 @@ contract KyralMarketplace is Ownable2Step, ReentrancyGuard {
         hasAccess[itemId][msg.sender] = true;
 
         emit Purchased(purchaseRef, itemId, msg.sender, price, fee, item.contentHash, item.version);
+    }
+
+    // ─── Bounties ───────────────────────────────────────────────────────────
+
+    /// @notice Escrow `maxFills * (reward + fee)` to request data. Contributors
+    /// receive the full advertised `reward`; the fee is charged on top.
+    function createBounty(bytes32 bountyId, uint128 reward, uint32 maxFills) external nonReentrant {
+        _createBounty(bountyId, reward, maxFills);
+    }
+
+    function createBountyWithPermit(
+        bytes32 bountyId,
+        uint128 reward,
+        uint32 maxFills,
+        uint256 permitValue,
+        uint256 deadline,
+        uint8 v,
+        bytes32 r,
+        bytes32 s
+    ) external nonReentrant {
+        try IERC20Permit(address(usdc)).permit(msg.sender, address(this), permitValue, deadline, v, r, s) {} catch {}
+        _createBounty(bountyId, reward, maxFills);
+    }
+
+    function bountyDeposit(uint128 reward, uint32 maxFills) public view returns (uint256 total, uint128 feePerFill) {
+        feePerFill = uint128((uint256(reward) * feeBps) / 10_000);
+        total = uint256(maxFills) * (uint256(reward) + feePerFill);
+    }
+
+    function _createBounty(bytes32 bountyId, uint128 reward, uint32 maxFills) private {
+        if (reward == 0 || maxFills == 0) revert InvalidBounty();
+        if (bounties[bountyId].funder != address(0)) revert BountyExists();
+
+        (uint256 total, uint128 feePerFill) = bountyDeposit(reward, maxFills);
+        bounties[bountyId] = Bounty({
+            funder: msg.sender,
+            reward: reward,
+            feePerFill: feePerFill,
+            maxFills: maxFills,
+            fills: 0,
+            open: true
+        });
+        usdc.safeTransferFrom(msg.sender, address(this), total);
+
+        emit BountyCreated(bountyId, msg.sender, reward, feePerFill, maxFills);
+    }
+
+    /// @notice Pay a contributor whose data the operator matched to the bounty.
+    /// @param dataHash Commitment to the de-identified data delivered.
+    function fillBounty(bytes32 bountyId, address contributor, bytes32 dataHash) external onlyOperator {
+        if (contributor == address(0)) revert ZeroAddress();
+        Bounty storage b = bounties[bountyId];
+        if (!b.open) revert BountyNotOpen();
+        if (bountyFilledBy[bountyId][contributor]) revert BountyAlreadyFilledBy();
+
+        bountyFilledBy[bountyId][contributor] = true;
+        b.fills += 1;
+        if (b.fills == b.maxFills) b.open = false;
+
+        claimable[contributor] += b.reward;
+        if (b.feePerFill > 0) claimable[treasury] += b.feePerFill;
+        hasAccess[bountyId][b.funder] = true;
+
+        emit BountyFilled(bountyId, contributor, b.reward, dataHash);
+        if (!b.open) emit BountyClosed(bountyId, 0);
+    }
+
+    /// @notice Close a bounty early and refund unfilled slots to the funder.
+    function closeBounty(bytes32 bountyId) external nonReentrant {
+        Bounty storage b = bounties[bountyId];
+        if (msg.sender != b.funder && msg.sender != operator && msg.sender != owner()) revert NotBountyFunder();
+        if (!b.open) revert BountyNotOpen();
+
+        b.open = false;
+        uint256 refund = uint256(b.maxFills - b.fills) * (uint256(b.reward) + b.feePerFill);
+        if (refund > 0) usdc.safeTransfer(b.funder, refund);
+
+        emit BountyClosed(bountyId, refund);
     }
 
     // ─── Payouts ────────────────────────────────────────────────────────────

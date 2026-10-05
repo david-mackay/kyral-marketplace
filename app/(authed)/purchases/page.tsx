@@ -1,16 +1,14 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { LoadingDots } from "@/components/LoadingDots";
-import { formatUsdc, formatDate } from "@/lib/format";
-import { txUrl } from "@/lib/chain";
+import { useEffect, useState } from "react";
+
+import { Money, SkeletonRows, VerifyLink } from "@/components/ui";
+import { formatDate } from "@/lib/format";
 
 type Purchase = {
   id: string;
   targetType: string;
-  targetId: string;
   title: string;
   amountUsdc: number;
   txSignature: string | null;
@@ -18,103 +16,50 @@ type Purchase = {
   createdAt: string;
 };
 
-export default function PurchasesPage() {
-  const router = useRouter();
-  const [purchases, setPurchases] = useState<Purchase[]>([]);
-  const [loading, setLoading] = useState(true);
-
-  const loadPurchases = useCallback(async () => {
-    setLoading(true);
-    try {
-      const res = await fetch("/api/purchases", { cache: "no-store" });
-      const data = await res.json();
-      setPurchases(data.purchases ?? []);
-    } catch (error) {
-      console.error("Failed to load purchases", error);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+export default function LibraryPage() {
+  const [purchases, setPurchases] = useState<Purchase[] | null>(null);
 
   useEffect(() => {
-    void loadPurchases();
-  }, [loadPurchases]);
-
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center py-20">
-        <span className="text-zinc-400 text-sm flex items-center gap-2">
-          Loading <LoadingDots />
-        </span>
-      </div>
-    );
-  }
+    void fetch("/api/purchases", { cache: "no-store" })
+      .then((r) => r.json())
+      .then((d) => setPurchases(d.purchases ?? []))
+      .catch(() => setPurchases([]));
+  }, []);
 
   return (
     <div className="max-w-3xl space-y-8">
       <div>
-        <h1 className="text-2xl font-bold text-zinc-100">My Purchases</h1>
-        <p className="text-sm text-zinc-500 mt-1">
-          Access your purchased datasets and listings.
+        <h1 className="text-4xl font-semibold tracking-tight text-zinc-50">Library</h1>
+        <p className="mt-3 text-zinc-400">
+          Data you&apos;ve bought. Data delivered to your requests lives on each{" "}
+          <Link href="/requests" className="text-emerald-300 hover:underline">request</Link>.
         </p>
       </div>
 
-      {purchases.length === 0 ? (
-        <div className="rounded-xl border border-dashed border-zinc-800 bg-zinc-900/30 p-12 text-center">
-          <p className="text-sm text-zinc-600 mb-4">
-            No purchases yet. Browse the marketplace to find health data.
-          </p>
-          <Link
-            href="/marketplace"
-            className="inline-flex px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-medium transition-colors"
-          >
-            Browse Marketplace
-          </Link>
+      {purchases === null ? (
+        <SkeletonRows rows={4} />
+      ) : purchases.length === 0 ? (
+        <div className="glass px-8 py-16 text-center">
+          <p className="text-sm text-zinc-500 mb-5">Nothing here yet.</p>
+          <Link href="/marketplace" className="btn-liquid">Browse the marketplace</Link>
         </div>
       ) : (
-        <div className="rounded-xl border border-zinc-800 bg-zinc-900/50 divide-y divide-zinc-800">
+        <ul className="glass divide-hairline px-6 sm:px-8">
           {purchases.map((p) => (
-            <div
-              key={p.id}
-              role="button"
-              tabIndex={0}
-              onClick={() => router.push(`/purchases/${p.id}`)}
-              onKeyDown={(e) => e.key === "Enter" && router.push(`/purchases/${p.id}`)}
-              className="flex items-center justify-between px-5 py-4 hover:bg-zinc-800/30 transition-colors gap-4 cursor-pointer"
-            >
-              <div className="min-w-0 flex-1">
-                <div className="text-sm font-medium text-zinc-200 truncate">
-                  {p.title}
+            <li key={p.id} className="flex items-center gap-4 py-5">
+              <Link href={`/purchases/${p.id}`} className="group min-w-0 flex-1">
+                <div className="text-[15px] text-zinc-100 group-hover:text-white truncate">{p.title}</div>
+                <div className="text-xs text-zinc-500 mt-1">
+                  {p.targetType === "dataset" ? "Pooled dataset" : "Individual"} · {formatDate(p.createdAt)}
+                  {p.status !== "confirmed" && <span className="text-amber-300"> · {p.status}</span>}
                 </div>
-                <div className="flex items-center gap-2 mt-1">
-                  <span className="text-xs text-zinc-500">
-                    {formatDate(p.createdAt)}
-                  </span>
-                  <span className="text-xs px-1.5 py-0.5 rounded bg-zinc-800 text-zinc-400">
-                    {p.targetType === "dataset" ? "Dataset" : "Listing"}
-                  </span>
-                </div>
-              </div>
-              <div className="flex items-center gap-2 shrink-0">
-                {p.txSignature && (
-                  <a
-                    href={txUrl(p.txSignature)}
-                    target="_blank"
-                    rel="noreferrer"
-                    onClick={(e) => e.stopPropagation()}
-                    className="text-xs text-emerald-500/70 hover:text-emerald-400"
-                  >
-                    View tx
-                  </a>
-                )}
-                <span className="text-sm text-zinc-400">
-                  {formatUsdc(p.amountUsdc)} USDC
-                </span>
-                <span className="text-zinc-500">→</span>
-              </div>
-            </div>
+              </Link>
+              <VerifyLink txHash={p.txSignature} />
+              <Money usdc={p.amountUsdc} className="text-zinc-300 tabular-nums" />
+              <Link href={`/purchases/${p.id}`} className="text-zinc-500 hover:text-zinc-200">→</Link>
+            </li>
           ))}
-        </div>
+        </ul>
       )}
     </div>
   );

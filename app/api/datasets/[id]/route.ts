@@ -9,6 +9,7 @@ import {
   datasetContributions,
   dataListings,
 } from "@/server/db/schema";
+import { profilesForDocuments, summarizeProfiles } from "@/server/profile-summary";
 
 
 export const runtime = "nodejs";
@@ -59,6 +60,7 @@ export async function GET(
         contributorWallet: users.walletAddress,
         contributorName: users.displayName,
         listingTitle: dataListings.title,
+        documentIds: dataListings.documentIds,
       })
       .from(datasetContributions)
       .leftJoin(
@@ -76,7 +78,15 @@ export async function GET(
         )
       );
 
-    return NextResponse.json({ dataset, contributions });
+    const profiles = await profilesForDocuments(
+      contributions.flatMap((c) => c.documentIds ?? [])
+    );
+    const dataProfile = summarizeProfiles([...profiles.values()]);
+
+    return NextResponse.json({
+      dataset: { ...dataset, dataProfile },
+      contributions: contributions.map(({ documentIds: _ids, ...c }) => c),
+    });
   } catch (error) {
     console.error("/api/datasets/[id] GET error", error);
     return NextResponse.json(

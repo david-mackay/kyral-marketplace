@@ -56,10 +56,18 @@ async function permitDomain(config: Config, token: Address) {
   }
 }
 
-async function purchaseWithPermit(config: Config, account: Address, quote: PurchaseQuote, price: bigint) {
-  const domain = await permitDomain(config, quote.usdcAddress);
+interface Payment {
+  token: Address;
+  spender: Address;
+  amount: bigint;
+  withPermit: (deadline: bigint, v: number, r: Hex, s: Hex) => Promise<Hex>;
+  withAllowance: () => Promise<Hex>;
+}
+
+async function payWithPermit(config: Config, account: Address, p: Payment) {
+  const domain = await permitDomain(config, p.token);
   const nonce = await readContract(config, {
-    address: quote.usdcAddress,
+    address: p.token,
     abi: testUsdcAbi,
     functionName: "nonces",
     args: [account],
@@ -71,81 +79,114 @@ async function purchaseWithPermit(config: Config, account: Address, quote: Purch
     domain,
     types: PERMIT_TYPES,
     primaryType: "Permit",
-    message: { owner: account, spender: quote.marketplaceAddress, value: price, nonce, deadline },
+    message: { owner: account, spender: p.spender, value: p.amount, nonce, deadline },
   });
   const { v, r, s } = hexToSignature(signature);
-
-  return writeContract(config, {
-    account,
-    address: quote.marketplaceAddress,
-    abi: kyralMarketplaceAbi,
-    functionName: "purchaseWithPermit",
-    args: [quote.itemId, price, quote.purchaseRef, deadline, Number(v), r, s],
-  });
+  return p.withPermit(deadline, Number(v), r, s);
 }
 
-async function purchaseWithApproval(config: Config, account: Address, quote: PurchaseQuote, price: bigint) {
+async function payWithApproval(config: Config, account: Address, p: Payment) {
   const allowance = await readContract(config, {
-    address: quote.usdcAddress,
+    address: p.token,
     abi: erc20Abi,
     functionName: "allowance",
-    args: [account, quote.marketplaceAddress],
+    args: [account, p.spender],
   });
 
-  if (allowance < price) {
+  if (allowance < p.amount) {
     const approveHash = await writeContract(config, {
       account,
-      address: quote.usdcAddress,
+      address: p.token,
       abi: erc20Abi,
       functionName: "approve",
-      args: [quote.marketplaceAddress, price],
+      args: [p.spender, p.amount],
     });
     await waitForTransactionReceipt(config, { hash: approveHash });
   }
-
-  return writeContract(config, {
-    account,
-    address: quote.marketplaceAddress,
-    abi: kyralMarketplaceAbi,
-    functionName: "purchase",
-    args: [quote.itemId, price, quote.purchaseRef],
-  });
+  return p.withAllowance();
 }
 
 /**
- * Pay the KyralMarketplace contract for a quoted item and wait for inclusion.
+ * Pull `amount` of USDC into the marketplace and wait for inclusion.
  * EOAs sign a single EIP-2612 permit; smart accounts fall back to approve.
  */
-export async function payForItem(config: Config, account: Address, quote: PurchaseQuote): Promise<Hex> {
+async function pay(config: Config, account: Address, p: Payment): Promise<Hex> {
   if (getChainId(config) !== monadChain.id) {
     await switchChain(config, { chainId: monadChain.id });
   }
 
-  const price = BigInt(quote.amountUsdc);
   const balance = await readContract(config, {
-    address: quote.usdcAddress,
+    address: p.token,
     abi: erc20Abi,
     functionName: "balanceOf",
     args: [account],
   });
-  if (balance < price) {
-    throw new Error("Not enough USDC in your wallet for this purchase.");
+  if (balance < p.amount) {
+    throw new Error("Not enough USDC in your account.");
   }
 
   const code = await getBytecode(config, { address: account });
   const isSmartAccount = !!code && code !== "0x";
 
   const txHash = isSmartAccount
-    ? await purchaseWithApproval(config, account, quote, price)
-    : await purchaseWithPermit(config, account, quote, price).catch((error: unknown) => {
+    ? await payWithApproval(config, account, p)
+    : await payWithPermit(config, account, p).catch((error: unknown) => {
         // User rejection should not trigger a second prompt.
         if (error instanceof Error && /reject|denied/i.test(error.message)) throw error;
-        return purchaseWithApproval(config, account, quote, price);
+        return payWithApproval(config, account, p);
       });
 
   const receipt = await waitForTransactionReceipt(config, { hash: txHash });
   if (receipt.status !== "success") {
-    throw new Error("Purchase transaction reverted.");
+    throw new Error("Transaction reverted.");
   }
   return txHash;
+}
+
+export function payForItem(config: Config, account: Address, quote: PurchaseQuote): Promise<Hex> {
+  const price = BigInt(quote.amountUsdc);
+  const base = { account, address: quote.marketplaceAddress, abi: kyralMarketplaceAbi } as const;
+  return pay(config, account, {
+    token: quote.usdcAddress,
+    spender: quote.marketplaceAddress,
+    amount: price,
+    withPermit: (deadline, v, r, s) =>
+      writeContract(config, {
+        ...base,
+        functionName: "purchaseWithPermit",
+        args: [quote.itemId, price, quote.purchaseRef, deadline, v, r, s],
+      }),
+    withAllowance: () =>
+      writeContract(config, { ...base, functionName: "purchase", args: [quote.itemId, price, quote.purchaseRef] }),
+  });
+}
+
+export interface BountyFunding {
+  bountyId: Hex;
+  rewardUsdc: number;
+  maxContributors: number;
+  depositUsdc: string;
+  marketplaceAddress: Address;
+  usdcAddress: Address;
+}
+
+/** Escrow a data request's full budget (rewards + protocol fee) in the marketplace. */
+export function fundBounty(config: Config, account: Address, f: BountyFunding): Promise<Hex> {
+  const deposit = BigInt(f.depositUsdc);
+  const reward = BigInt(f.rewardUsdc);
+  const maxFills = f.maxContributors;
+  const base = { account, address: f.marketplaceAddress, abi: kyralMarketplaceAbi } as const;
+  return pay(config, account, {
+    token: f.usdcAddress,
+    spender: f.marketplaceAddress,
+    amount: deposit,
+    withPermit: (deadline, v, r, s) =>
+      writeContract(config, {
+        ...base,
+        functionName: "createBountyWithPermit",
+        args: [f.bountyId, reward, maxFills, deposit, deadline, v, r, s],
+      }),
+    withAllowance: () =>
+      writeContract(config, { ...base, functionName: "createBounty", args: [f.bountyId, reward, maxFills] }),
+  });
 }

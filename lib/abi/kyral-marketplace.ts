@@ -66,6 +66,103 @@ export const kyralMarketplaceAbi = [
   },
   {
     "type": "function",
+    "name": "bounties",
+    "inputs": [
+      {
+        "name": "bountyId",
+        "type": "bytes32",
+        "internalType": "bytes32"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "funder",
+        "type": "address",
+        "internalType": "address"
+      },
+      {
+        "name": "reward",
+        "type": "uint128",
+        "internalType": "uint128"
+      },
+      {
+        "name": "feePerFill",
+        "type": "uint128",
+        "internalType": "uint128"
+      },
+      {
+        "name": "maxFills",
+        "type": "uint32",
+        "internalType": "uint32"
+      },
+      {
+        "name": "fills",
+        "type": "uint32",
+        "internalType": "uint32"
+      },
+      {
+        "name": "open",
+        "type": "bool",
+        "internalType": "bool"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "bountyDeposit",
+    "inputs": [
+      {
+        "name": "reward",
+        "type": "uint128",
+        "internalType": "uint128"
+      },
+      {
+        "name": "maxFills",
+        "type": "uint32",
+        "internalType": "uint32"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "total",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "feePerFill",
+        "type": "uint128",
+        "internalType": "uint128"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "bountyFilledBy",
+    "inputs": [
+      {
+        "name": "bountyId",
+        "type": "bytes32",
+        "internalType": "bytes32"
+      },
+      {
+        "name": "contributor",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "bool",
+        "internalType": "bool"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
     "name": "claim",
     "inputs": [],
     "outputs": [
@@ -117,6 +214,90 @@ export const kyralMarketplaceAbi = [
   },
   {
     "type": "function",
+    "name": "closeBounty",
+    "inputs": [
+      {
+        "name": "bountyId",
+        "type": "bytes32",
+        "internalType": "bytes32"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "createBounty",
+    "inputs": [
+      {
+        "name": "bountyId",
+        "type": "bytes32",
+        "internalType": "bytes32"
+      },
+      {
+        "name": "reward",
+        "type": "uint128",
+        "internalType": "uint128"
+      },
+      {
+        "name": "maxFills",
+        "type": "uint32",
+        "internalType": "uint32"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "createBountyWithPermit",
+    "inputs": [
+      {
+        "name": "bountyId",
+        "type": "bytes32",
+        "internalType": "bytes32"
+      },
+      {
+        "name": "reward",
+        "type": "uint128",
+        "internalType": "uint128"
+      },
+      {
+        "name": "maxFills",
+        "type": "uint32",
+        "internalType": "uint32"
+      },
+      {
+        "name": "permitValue",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "deadline",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "v",
+        "type": "uint8",
+        "internalType": "uint8"
+      },
+      {
+        "name": "r",
+        "type": "bytes32",
+        "internalType": "bytes32"
+      },
+      {
+        "name": "s",
+        "type": "bytes32",
+        "internalType": "bytes32"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
     "name": "feeBps",
     "inputs": [],
     "outputs": [
@@ -127,6 +308,29 @@ export const kyralMarketplaceAbi = [
       }
     ],
     "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "fillBounty",
+    "inputs": [
+      {
+        "name": "bountyId",
+        "type": "bytes32",
+        "internalType": "bytes32"
+      },
+      {
+        "name": "contributor",
+        "type": "address",
+        "internalType": "address"
+      },
+      {
+        "name": "dataHash",
+        "type": "bytes32",
+        "internalType": "bytes32"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
   },
   {
     "type": "function",
@@ -453,6 +657,93 @@ export const kyralMarketplaceAbi = [
   },
   {
     "type": "event",
+    "name": "BountyClosed",
+    "inputs": [
+      {
+        "name": "bountyId",
+        "type": "bytes32",
+        "indexed": true,
+        "internalType": "bytes32"
+      },
+      {
+        "name": "refund",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "BountyCreated",
+    "inputs": [
+      {
+        "name": "bountyId",
+        "type": "bytes32",
+        "indexed": true,
+        "internalType": "bytes32"
+      },
+      {
+        "name": "funder",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      },
+      {
+        "name": "reward",
+        "type": "uint128",
+        "indexed": false,
+        "internalType": "uint128"
+      },
+      {
+        "name": "feePerFill",
+        "type": "uint128",
+        "indexed": false,
+        "internalType": "uint128"
+      },
+      {
+        "name": "maxFills",
+        "type": "uint32",
+        "indexed": false,
+        "internalType": "uint32"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "BountyFilled",
+    "inputs": [
+      {
+        "name": "bountyId",
+        "type": "bytes32",
+        "indexed": true,
+        "internalType": "bytes32"
+      },
+      {
+        "name": "contributor",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      },
+      {
+        "name": "reward",
+        "type": "uint128",
+        "indexed": false,
+        "internalType": "uint128"
+      },
+      {
+        "name": "dataHash",
+        "type": "bytes32",
+        "indexed": false,
+        "internalType": "bytes32"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
     "name": "Claimed",
     "inputs": [
       {
@@ -666,7 +957,27 @@ export const kyralMarketplaceAbi = [
   },
   {
     "type": "error",
+    "name": "BountyAlreadyFilledBy",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "BountyExists",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "BountyNotOpen",
+    "inputs": []
+  },
+  {
+    "type": "error",
     "name": "FeeTooHigh",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "InvalidBounty",
     "inputs": []
   },
   {
@@ -682,6 +993,11 @@ export const kyralMarketplaceAbi = [
   {
     "type": "error",
     "name": "ItemInactive",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "NotBountyFunder",
     "inputs": []
   },
   {

@@ -165,6 +165,75 @@ contract KyralMarketplaceTest is Test {
         market.setFeeBps(2_001);
     }
 
+    bytes32 constant BOUNTY = keccak256("bounty:1");
+
+    function _fundBounty(uint128 reward, uint32 maxFills) internal {
+        (uint256 total,) = market.bountyDeposit(reward, maxFills);
+        vm.startPrank(buyer);
+        usdc.approve(address(market), total);
+        market.createBounty(BOUNTY, reward, maxFills);
+        vm.stopPrank();
+    }
+
+    function test_bountyEscrowsAndPaysFullReward() public {
+        _fundBounty(40e6, 3);
+        // 3 slots * (40 + 5% fee)
+        assertEq(usdc.balanceOf(address(market)), 126e6);
+
+        vm.prank(operator);
+        market.fillBounty(BOUNTY, alice, keccak256("alice-data"));
+        assertEq(market.claimable(alice), 40e6);
+        assertEq(market.claimable(treasury), 2e6);
+        assertTrue(market.hasAccess(BOUNTY, buyer));
+    }
+
+    function test_bountyRejectsDuplicateContributorAndClosesWhenFull() public {
+        _fundBounty(10e6, 2);
+        vm.startPrank(operator);
+        market.fillBounty(BOUNTY, alice, bytes32(0));
+        vm.expectRevert(KyralMarketplace.BountyAlreadyFilledBy.selector);
+        market.fillBounty(BOUNTY, alice, bytes32(0));
+        market.fillBounty(BOUNTY, bob, bytes32(0));
+        vm.expectRevert(KyralMarketplace.BountyNotOpen.selector);
+        market.fillBounty(BOUNTY, carol, bytes32(0));
+        vm.stopPrank();
+        (,,,, uint32 fills, bool open) = market.bounties(BOUNTY);
+        assertEq(fills, 2);
+        assertFalse(open);
+    }
+
+    function test_closeBountyRefundsUnfilledSlots() public {
+        _fundBounty(10e6, 3);
+        vm.prank(operator);
+        market.fillBounty(BOUNTY, alice, bytes32(0));
+
+        uint256 before = usdc.balanceOf(buyer);
+        vm.prank(buyer);
+        market.closeBounty(BOUNTY);
+        assertEq(usdc.balanceOf(buyer) - before, 2 * 10.5e6);
+        // Escrow left = alice's reward + one fee
+        assertEq(usdc.balanceOf(address(market)), 10.5e6);
+    }
+
+    function test_onlyOperatorFillsAndOnlyFunderCloses() public {
+        _fundBounty(10e6, 1);
+        vm.prank(alice);
+        vm.expectRevert(KyralMarketplace.NotOperator.selector);
+        market.fillBounty(BOUNTY, alice, bytes32(0));
+        vm.prank(alice);
+        vm.expectRevert(KyralMarketplace.NotBountyFunder.selector);
+        market.closeBounty(BOUNTY);
+    }
+
+    function test_bountyIdCannotBeReused() public {
+        _fundBounty(1e6, 1);
+        vm.startPrank(buyer);
+        usdc.approve(address(market), 2e6);
+        vm.expectRevert(KyralMarketplace.BountyExists.selector);
+        market.createBounty(BOUNTY, 1e6, 1);
+        vm.stopPrank();
+    }
+
     function testFuzz_splitConservesFunds(uint128 price, uint8 n) public {
         price = uint128(bound(price, 1, 1_000e6));
         n = uint8(bound(n, 1, 50));

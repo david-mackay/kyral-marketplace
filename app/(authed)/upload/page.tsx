@@ -1,273 +1,214 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
-import { DocumentUploader } from "@/components/DocumentUploader";
-import { LoadingDots } from "@/components/LoadingDots";
-import { DATA_CATEGORIES, CATEGORY_LABELS } from "@/lib/format";
+import Link from "next/link";
+import { useCallback, useEffect, useRef, useState } from "react";
 
-type DocumentRow = {
-  id: string;
-  ownerUserId: string;
-  originalFileName: string;
-  contentType: string;
-  sizeBytes: number;
-  status: "uploaded" | "parsed" | "error";
-  createdAt: string;
+import { Money, formatSpan } from "@/components/ui";
+import type { DataProfile } from "@/lib/data-profile";
+
+const STEPS = ["Reading your file", "Removing anything that identifies you", "Pricing it", "Matching it to studies"];
+
+type Item = {
+  key: string;
+  file: File;
+  state: "queued" | "working" | "done" | "error";
+  step: number;
+  profile?: DataProfile | null;
+  listingPriceUsdc?: number | null;
+  requestsFilled?: number;
+  shareable?: boolean;
+  error?: string;
 };
 
 export default function UploadPage() {
-  const router = useRouter();
-  const [documents, setDocuments] = useState<DocumentRow[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [items, setItems] = useState<Item[]>([]);
+  const [dragging, setDragging] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const busy = useRef(false);
 
-  // Listing form
-  const [title, setTitle] = useState("");
-  const [description, setDescription] = useState("");
-  const [category, setCategory] = useState("other");
-  const [priceUsdc, setPriceUsdc] = useState("");
-  const [selectedDocIds, setSelectedDocIds] = useState<Set<string>>(new Set());
-  const [creating, setCreating] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const update = (key: string, patch: Partial<Item>) =>
+    setItems((xs) => xs.map((x) => (x.key === key ? { ...x, ...patch } : x)));
 
-  const loadDocuments = useCallback(async () => {
-    setLoading(true);
+  const processNext = useCallback(async (queue: Item[]) => {
+    if (busy.current) return;
+    const next = queue.find((i) => i.state === "queued");
+    if (!next) return;
+    busy.current = true;
+    update(next.key, { state: "working", step: 0 });
+
+    // The server does everything in one request; advance the narration while it works.
+    let step = 0;
+    const ticker = setInterval(() => {
+      step = Math.min(step + 1, STEPS.length - 1);
+      update(next.key, { step });
+    }, 1_800);
+
+    let patch: Partial<Item>;
     try {
-      const res = await fetch("/api/documents/upload", { cache: "no-store" });
-      const data = await res.json();
-      setDocuments(data.documents ?? []);
-    } catch {
-      // ignore
-    } finally {
-      setLoading(false);
+      const form = new FormData();
+      form.set("file", next.file);
+      const res = await fetch("/api/documents/upload", { method: "POST", body: form });
+      const body = await res.json();
+      if (!res.ok) throw new Error(body.error ?? "Upload failed");
+      const failed = body.document?.status === "error";
+      patch = {
+        state: failed ? "error" : "done",
+        error: failed ? "We couldn't read this file. It's stored privately." : undefined,
+        profile: body.document?.profile ?? null,
+        shareable: !!body.document?.deidObjectKey,
+        listingPriceUsdc: body.listing?.priceUsdc ?? null,
+        requestsFilled: body.requestsFilled ?? 0,
+      };
+    } catch (e) {
+      patch = { state: "error", error: e instanceof Error ? e.message : "Upload failed" };
     }
+    clearInterval(ticker);
+    busy.current = false;
+    // This state change re-runs the effect below, which starts the next file.
+    update(next.key, patch);
   }, []);
 
   useEffect(() => {
-    void loadDocuments();
-  }, [loadDocuments]);
+    void processNext(items);
+  }, [items, processNext]);
 
-  const toggleDoc = (docId: string) => {
-    setSelectedDocIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(docId)) next.delete(docId);
-      else next.add(docId);
-      return next;
-    });
+  const addFiles = (files: FileList | null) => {
+    if (!files) return;
+    setItems((xs) => [
+      ...xs,
+      ...Array.from(files).map((file) => ({ key: `${file.name}-${crypto.randomUUID()}`, file, state: "queued" as const, step: 0 })),
+    ]);
   };
 
-  const handleCreateListing = async () => {
-    if (!title.trim()) {
-      setError("Title is required");
-      return;
-    }
-    if (selectedDocIds.size === 0) {
-      setError("Select at least one document");
-      return;
-    }
-    const price = parseFloat(priceUsdc);
-    if (isNaN(price) || price <= 0) {
-      setError("Enter a valid price");
-      return;
-    }
-
-    setCreating(true);
-    setError(null);
-
-    try {
-      const res = await fetch("/api/listings", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          title: title.trim(),
-          description: description.trim() || undefined,
-          category,
-          documentIds: Array.from(selectedDocIds),
-          priceUsdc: Math.round(price * 1_000_000), // Convert to smallest unit
-          status: "active",
-        }),
-      });
-
-      if (!res.ok) {
-        const data = await res.json();
-        throw new Error(data.error || "Failed to create listing");
-      }
-
-      router.push("/dashboard");
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to create listing");
-    } finally {
-      setCreating(false);
-    }
-  };
+  const done = items.filter((i) => i.state === "done");
+  const totalValue = done.reduce((s, i) => s + (i.listingPriceUsdc ?? 0), 0);
+  const totalStudies = done.reduce((s, i) => s + (i.requestsFilled ?? 0), 0);
 
   return (
-    <div className="max-w-2xl space-y-8">
+    <div className="max-w-3xl mx-auto space-y-8">
       <div>
-        <h1 className="text-2xl font-bold text-zinc-100">
-          Upload & List Data
-        </h1>
-        <p className="text-sm text-zinc-500 mt-1">
-          Upload your health data files, then create a marketplace listing.
+        <h1 className="text-4xl sm:text-5xl font-semibold tracking-tight text-zinc-50">Add your health data</h1>
+        <p className="mt-3 text-zinc-400 max-w-xl">
+          Drop in lab results, wearable exports, symptom logs, or medical records. We strip out anything that
+          identifies you, price it, and offer it to studies you&apos;ve allowed. You don&apos;t fill in anything.
         </p>
       </div>
 
-      {/* Step 1: Upload */}
-      <section>
-        <h2 className="text-lg font-semibold text-zinc-200 mb-4">
-          Step 1: Upload Files
-        </h2>
-        <DocumentUploader
-          onUploadComplete={() => void loadDocuments()}
-          documents={documents}
-          onRefresh={() => void loadDocuments()}
+      <div
+        onDragOver={(e) => {
+          e.preventDefault();
+          setDragging(true);
+        }}
+        onDragLeave={() => setDragging(false)}
+        onDrop={(e) => {
+          e.preventDefault();
+          setDragging(false);
+          addFiles(e.dataTransfer.files);
+        }}
+        onClick={() => inputRef.current?.click()}
+        className={`glass cursor-pointer px-8 py-16 text-center transition-all ${
+          dragging ? "scale-[1.01] border-emerald-300/40" : ""
+        }`}
+      >
+        <div className="mx-auto mb-5 h-14 w-14 rounded-full bg-gradient-to-br from-emerald-300/30 to-sky-400/20 flex items-center justify-center shadow-[inset_0_1px_0_rgba(255,255,255,0.3)]">
+          <svg viewBox="0 0 24 24" className="h-6 w-6 text-emerald-200" fill="none" stroke="currentColor" strokeWidth="1.6">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M12 16V4m0 0l-4 4m4-4l4 4M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2" />
+          </svg>
+        </div>
+        <div className="text-zinc-100">Drop files here, or click to choose</div>
+        <div className="mt-1 text-xs text-zinc-500">CSV, PDF, images and exports from most health apps</div>
+        <input
+          ref={inputRef}
+          type="file"
+          multiple
+          className="hidden"
+          accept=".csv,.tsv,.pdf,.png,.jpg,.jpeg,.json,.txt,.xml"
+          onChange={(e) => {
+            addFiles(e.target.files);
+            e.target.value = "";
+          }}
         />
-      </section>
+      </div>
 
-      {/* Step 2: Create Listing */}
-      <section className="space-y-4">
-        <h2 className="text-lg font-semibold text-zinc-200">
-          Step 2: Create Listing
-        </h2>
+      {items.length > 0 && (
+        <ul className="glass divide-hairline px-6 sm:px-8">
+          {items.map((item) => (
+            <UploadRow key={item.key} item={item} />
+          ))}
+        </ul>
+      )}
 
-        {error && (
-          <div className="rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-400">
-            {error}
+      {done.length > 0 && items.every((i) => i.state === "done" || i.state === "error") && (
+        <div className="text-center space-y-4 pt-2">
+          <div className="text-zinc-400 text-sm">
+            {totalValue > 0 && (
+              <>
+                Listed for a combined <Money usdc={totalValue} className="text-zinc-100" /> per buyer
+              </>
+            )}
+            {totalStudies > 0 && <> · joined {totalStudies} paid {totalStudies === 1 ? "study" : "studies"}</>}
+          </div>
+          <Link href="/earn" className="btn-liquid">See your earnings</Link>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function UploadRow({ item }: { item: Item }) {
+  const p = item.profile;
+  return (
+    <li className="py-5">
+      <div className="flex items-start justify-between gap-4">
+        <div className="min-w-0">
+          <div className="text-sm text-zinc-100 truncate">{p?.documentType ?? item.file.name}</div>
+          {item.state === "working" && (
+            <div className="mt-1 text-xs text-emerald-200/80 flex items-center gap-2">
+              <span className="h-1.5 w-1.5 rounded-full bg-emerald-300 animate-pulse" />
+              {STEPS[item.step]}…
+            </div>
+          )}
+          {item.state === "queued" && <div className="mt-1 text-xs text-zinc-500">Waiting…</div>}
+          {item.state === "error" && <div className="mt-1 text-xs text-amber-300">{item.error}</div>}
+          {item.state === "done" && p && (
+            <>
+              <p className="mt-1 text-xs text-zinc-400 leading-relaxed max-w-lg">{p.summary}</p>
+              <div className="flex flex-wrap gap-1.5 mt-2.5">
+                {p.rowCount > 0 && <span className="chip">{p.rowCount} records</span>}
+                {p.spanDays > 0 && <span className="chip">{formatSpan(p.spanDays)}</span>}
+                {item.shareable && (
+                  <span className="chip text-emerald-200">
+                    {p.removedIdentifiers.length ? `Removed ${p.removedIdentifiers.join(", ")}` : "No identifiers found"}
+                  </span>
+                )}
+                {item.shareable && <span className="chip">Dates shifted</span>}
+                {!item.shareable && <span className="chip text-amber-200">Kept private</span>}
+              </div>
+            </>
+          )}
+        </div>
+        {item.state === "done" && (
+          <div className="text-right shrink-0">
+            {item.listingPriceUsdc ? (
+              <>
+                <Money usdc={item.listingPriceUsdc} className="text-lg text-zinc-50" />
+                <div className="text-[11px] text-zinc-500">per buyer</div>
+              </>
+            ) : null}
+            {item.requestsFilled ? (
+              <div className="text-[11px] text-emerald-300 mt-1">Joined {item.requestsFilled} studies</div>
+            ) : null}
           </div>
         )}
-
-        <div className="rounded-xl border border-zinc-800 bg-zinc-900/50 p-5 space-y-5">
-          {/* Select Documents */}
-          <div>
-            <label className="block text-sm font-medium text-zinc-300 mb-2">
-              Select Documents
-            </label>
-            {loading ? (
-              <div className="text-sm text-zinc-500 flex items-center gap-2">
-                Loading <LoadingDots />
-              </div>
-            ) : documents.length === 0 ? (
-              <div className="text-sm text-zinc-600">
-                No documents uploaded yet. Upload files above first.
-              </div>
-            ) : (
-              <div className="space-y-2">
-                {documents.map((doc) => (
-                  <label
-                    key={doc.id}
-                    className={[
-                      "flex items-center gap-3 px-4 py-3 rounded-lg border cursor-pointer transition-colors",
-                      selectedDocIds.has(doc.id)
-                        ? "border-emerald-500/50 bg-emerald-500/5"
-                        : "border-zinc-800 hover:border-zinc-700",
-                    ].join(" ")}
-                  >
-                    <input
-                      type="checkbox"
-                      checked={selectedDocIds.has(doc.id)}
-                      onChange={() => toggleDoc(doc.id)}
-                      className="rounded border-zinc-600 bg-zinc-800 text-emerald-500 focus:ring-emerald-500/50"
-                    />
-                    <div className="flex-1 min-w-0">
-                      <div className="text-sm text-zinc-200 truncate">
-                        {doc.originalFileName}
-                      </div>
-                      <div className="text-xs text-zinc-600">
-                        {Math.round(doc.sizeBytes / 1024)} KB
-                      </div>
-                    </div>
-                  </label>
-                ))}
-              </div>
-            )}
-          </div>
-
-          {/* Title */}
-          <div>
-            <label className="block text-sm font-medium text-zinc-300 mb-1.5">
-              Title
-            </label>
-            <input
-              type="text"
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              placeholder="e.g. Blood Work Results 2025"
-              className="w-full px-4 py-2.5 rounded-lg border border-zinc-800 bg-zinc-900 text-sm text-zinc-200 placeholder:text-zinc-600 outline-none focus:border-zinc-600"
-            />
-          </div>
-
-          {/* Description */}
-          <div>
-            <label className="block text-sm font-medium text-zinc-300 mb-1.5">
-              Description
-            </label>
-            <textarea
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              placeholder="Describe the data you're listing..."
-              rows={3}
-              className="w-full px-4 py-2.5 rounded-lg border border-zinc-800 bg-zinc-900 text-sm text-zinc-200 placeholder:text-zinc-600 outline-none focus:border-zinc-600 resize-none"
-            />
-          </div>
-
-          {/* Category */}
-          <div>
-            <label className="block text-sm font-medium text-zinc-300 mb-1.5">
-              Category
-            </label>
-            <select
-              value={category}
-              onChange={(e) => setCategory(e.target.value)}
-              className="w-full px-4 py-2.5 rounded-lg border border-zinc-800 bg-zinc-900 text-sm text-zinc-200 outline-none focus:border-zinc-600"
-            >
-              {DATA_CATEGORIES.map((cat) => (
-                <option key={cat} value={cat}>
-                  {CATEGORY_LABELS[cat]}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          {/* Price */}
-          <div>
-            <label className="block text-sm font-medium text-zinc-300 mb-1.5">
-              Price (USDC)
-            </label>
-            <div className="relative">
-              <span className="absolute left-4 top-1/2 -translate-y-1/2 text-sm text-zinc-500">
-                $
-              </span>
-              <input
-                type="number"
-                step="0.01"
-                min="0.01"
-                value={priceUsdc}
-                onChange={(e) => setPriceUsdc(e.target.value)}
-                placeholder="0.00"
-                className="w-full pl-8 pr-16 py-2.5 rounded-lg border border-zinc-800 bg-zinc-900 text-sm text-zinc-200 placeholder:text-zinc-600 outline-none focus:border-zinc-600"
-              />
-              <span className="absolute right-4 top-1/2 -translate-y-1/2 text-xs text-zinc-500">
-                USDC
-              </span>
-            </div>
-          </div>
-
-          {/* Submit */}
-          <button
-            onClick={() => void handleCreateListing()}
-            disabled={creating}
-            className="w-full py-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-medium text-sm transition-colors disabled:opacity-50"
-          >
-            {creating ? (
-              <span className="inline-flex items-center gap-2">
-                Creating Listing <LoadingDots />
-              </span>
-            ) : (
-              "Create Listing"
-            )}
-          </button>
+      </div>
+      {item.state === "working" && (
+        <div className="mt-3 h-1 rounded-full bg-white/5 overflow-hidden">
+          <div
+            className="h-full bg-gradient-to-r from-emerald-400 to-sky-400 transition-[width] duration-[1800ms]"
+            style={{ width: `${((item.step + 1) / STEPS.length) * 92}%` }}
+          />
         </div>
-      </section>
-    </div>
+      )}
+    </li>
   );
 }

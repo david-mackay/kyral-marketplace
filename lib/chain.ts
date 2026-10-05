@@ -33,6 +33,10 @@ export function itemIdFor(type: ItemType, id: string): Hex {
   return keccak256(toBytes(`kyral:${type}:${id}`));
 }
 
+export function bountyIdFor(id: string): Hex {
+  return keccak256(toBytes(`kyral:bounty:${id}`));
+}
+
 export function purchaseRefFor(purchaseId: string): Hex {
   return keccak256(toBytes(`kyral:purchase:${purchaseId}`));
 }

@@ -1,6 +1,16 @@
 # Kyral Marketplace
 
-A health-data marketplace on Monad. People upload their records, sell access individually, or pool them into datasets with other contributors. Every sale settles onchain: the buyer pays a contract, the contract splits revenue across contributors, and each contributor claims their share directly. Kyral never custodies earnings.
+A health-data marketplace on Monad, run as a service for patients: **upload once, and Kyral de-identifies your data, prices it, and sells it to research you approve.** Researchers post funded data requests, and matching data fills them automatically. Every payment settles onchain: rewards and sales are credited to contributors by the contract, and each contributor withdraws directly. Kyral never custodies earnings.
+
+## How it works
+
+1. **Upload.** Patients drop in CSVs, lab PDFs, or wearable exports (`/upload`).
+2. **Understand and de-identify.** The intake agent (`server/intake/`) works out what the file is (Reducto for PDFs and images, OpenRouter for classification, heuristics as a fallback). It drops identifier columns, scrubs names, emails, phone numbers, MRNs and addresses from free text, shifts every date by a per-person offset, and buckets ages over 89. Buyers only ever receive this de-identified copy, and its SHA-256 is what gets anchored onchain.
+3. **Price and list.** A pricing model (category, depth, history, richness) sets a starting price, and the data is listed automatically. Patients can edit or pause it.
+4. **Match to requests.** Researchers post requests (`/requests/new`) with criteria, a purpose, and a reward per person, and escrow the full budget in the contract. Matching data from people who consented to that purpose (academic, nonprofit, commercial, pharma) fills each slot. The operator calls `fillBounty`, which pays the contributor from escrow and grants the researcher access.
+5. **Get paid.** `/earn` shows earnings in dollars, a live activity feed ("your sleep log joined a Stanford study"), consent settings, and opportunities you'd qualify for if you opted in. Withdrawals are relayed, so users never need gas.
+
+Crypto stays in the background: amounts are shown in dollars, sign-in works with email or Google, and every payment has a small "Verify" link to MonadVision.
 
 **Monad Metropolis track:** Trust, Identity & AI Infrastructure (data ownership and provenance).
 
@@ -12,6 +22,7 @@ A health-data marketplace on Monad. People upload their records, sell access ind
 - **Trustless revenue splits.** `purchase` / `purchaseWithPermit` pull USDC from the buyer, take the platform fee, and credit each contributor's claimable balance in the same transaction (`RevenueCredited`). Rounding dust goes to the treasury, and a fuzz test checks that the split always adds up to the price.
 - **Self-custodied payouts.** Contributors call `claim()`, or Kyral relays `claimFor(account)` so users without MON can withdraw. Funds can only move to the account itself.
 - **Access receipts.** `hasAccess(itemId, buyer)` records every purchase onchain, linked to the offchain order by `purchaseRef`.
+- **Escrowed data requests.** `createBounty` / `createBountyWithPermit` lock `maxFills × (reward + fee)`. `fillBounty` (operator) credits the contributor the full reward, records the de-identified data hash in `BountyFilled`, and grants the funder access. One fill per contributor. `closeBounty` refunds unfilled slots to the funder.
 
 The server holds an operator key that registers catalog changes and pays relay gas. It never holds user funds.
 
@@ -25,6 +36,9 @@ The original app ran on Solana with an escrow wallet and an offchain ledger. For
 - Added file hashing on upload, onchain anchoring of listings and datasets, and a provenance panel linking to MonadVision.
 - Added single-signature checkout via EIP-2612 permit, with an approve fallback for smart accounts.
 - Added a testnet USDC faucet in the UI.
+- Added escrowed data requests (bounties) with consent-scoped auto-matching.
+- Added the intake agent: file understanding, de-identification, pricing, and auto-listing.
+- Redesigned the app around patients (big earnings, activity feed, consent) and researchers (requests), with dollars instead of tokens.
 
 ## Running locally
 
@@ -40,9 +54,13 @@ npm run contracts:deploy        # needs DEPLOYER_PRIVATE_KEY and testnet MON fro
 npm run contracts:abi           # regenerate lib/abi after contract changes
 
 # App
-npm run db:push
+npm run db:push                 # use a fresh database; this adds tables and columns
+npm run seed:demo               # optional: funded requests + demo patients from sample-data/
+npm run seed:demo -- --wallet 0xYourAddress   # also give your own account data and earnings
 npm run dev
 ```
+
+The seed runs the real pipeline: it escrows five requests from the operator wallet (topping up from the TestUSDC faucet), then uploads sample files for four personas, which get de-identified, listed, and matched onchain.
 
 Set `OPERATOR_PRIVATE_KEY` to the operator address used at deploy time (the deployer by default), and fund it with testnet MON.
 
@@ -56,3 +74,9 @@ Set `OPERATOR_PRIVATE_KEY` to the operator address used at deploy time (the depl
 | `server/monad/` | Operator client, catalog sync, purchase verification, relayed claims, hashing |
 | `app/api/purchases/*` | Quote (syncs item onchain) and confirm (verifies events) |
 | `app/api/withdrawals` | Relayed `claimFor` payouts |
+| `server/intake/` | Reducto/CSV parsing, de-identification, classification, pricing, auto-listing |
+| `server/matching.ts` | Consent-aware matching of data to requests and onchain fills |
+| `app/api/bounties/*` | Create, fund (verifies escrow), close (refund), and download requests |
+| `app/(authed)/earn` | Patient home: earnings, activity, consent, data |
+| `app/(public)/requests` | Researcher requests: browse, post, track |
+| `scripts/seed-demo.ts` | Demo data |

@@ -13,7 +13,8 @@
     "contracts:build": "cd contracts && forge build && cd .. && node scripts/gen-abi.mjs",
     "contracts:abi": "node scripts/gen-abi.mjs",
     "contracts:test": "cd contracts && forge test -vv",
-    "contracts:deploy": "cd contracts && forge script script/Deploy.s.sol --rpc-url ${MONAD_RPC_URL:-https://testnet-rpc.monad.xyz} --broadcast"
+    "contracts:deploy": "cd contracts && forge script script/Deploy.s.sol --rpc-url ${MONAD_RPC_URL:-https://testnet-rpc.monad.xyz} --broadcast",
+    "seed:demo": "tsx --env-file=.env scripts/seed-demo.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.990.0",
@@ -46,6 +47,7 @@
     "eslint": "^9",
     "eslint-config-next": "16.1.6",
     "tailwindcss": "^4",
+    "tsx": "^4.23.15",
     "typescript": "^5"
   }
 }

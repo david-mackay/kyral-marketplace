@@ -5,7 +5,8 @@ import { z } from "zod";
 
 import { requireAuthenticatedUser } from "@/server/auth/session";
 import { db } from "@/server/db";
-import { purchases, revenueEvents, users } from "@/server/db/schema";
+import { dataListings, datasets, purchases, revenueEvents, users } from "@/server/db/schema";
+import { recordActivity } from "@/server/activity";
 import { verifyPurchase, type VerifiedPurchase } from "@/server/monad/marketplace";
 
 export const runtime = "nodejs";
@@ -71,7 +72,7 @@ export async function POST(req: NextRequest) {
       .returning();
 
     if (confirmed) {
-      await recordEntitlements(purchase.id, verification);
+      await recordEntitlements(purchase, verification, txHash);
     }
 
     return NextResponse.json({ ok: true, purchaseId, txHash });
@@ -97,7 +98,12 @@ export async function POST(req: NextRequest) {
  * Mirror the onchain revenue split into revenue_events for earnings history.
  * Balances themselves live in the contract; contributors claim from there.
  */
-async function recordEntitlements(purchaseId: string, verification: VerifiedPurchase) {
+async function recordEntitlements(
+  purchase: typeof purchases.$inferSelect,
+  verification: VerifiedPurchase,
+  txHash: string
+) {
+  const purchaseId = purchase.id;
   if (verification.credits.length === 0) return;
 
   const wallets = [...new Set(verification.credits.map((c) => getAddress(c.recipient)))];
@@ -114,7 +120,24 @@ async function recordEntitlements(purchaseId: string, verification: VerifiedPurc
       : [];
   });
 
-  if (rows.length > 0) {
-    await db.insert(revenueEvents).values(rows);
-  }
+  if (rows.length === 0) return;
+  await db.insert(revenueEvents).values(rows);
+
+  const target =
+    purchase.targetType === "listing"
+      ? await db.query.dataListings.findFirst({ where: eq(dataListings.id, purchase.targetId) })
+      : await db.query.datasets.findFirst({ where: eq(datasets.id, purchase.targetId) });
+  const title = target?.title ?? "your data";
+
+  await recordActivity(
+    ...rows.map((row) => ({
+      userId: row.recipientUserId,
+      kind: "sale" as const,
+      title: `A researcher bought ${purchase.targetType === "dataset" ? "a dataset you're part of" : `"${title}"`}`,
+      detail: purchase.targetType === "dataset" ? title : "Paid instantly to your balance",
+      amountUsdc: row.amountUsdc,
+      href: `/marketplace/${purchase.targetId}?type=${purchase.targetType}`,
+      txHash,
+    }))
+  );
 }

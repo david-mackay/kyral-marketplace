@@ -6,6 +6,7 @@ import { requireAuthenticatedUser, getAuthenticatedUser } from "@/server/auth/se
 import { db } from "@/server/db";
 import { dataListings, users } from "@/server/db/schema";
 import { syncItemSafe } from "@/server/monad/marketplace";
+import { profilesForDocuments, summarizeProfiles } from "@/server/profile-summary";
 
 export const runtime = "nodejs";
 
@@ -82,7 +83,15 @@ export async function GET(req: NextRequest) {
       .orderBy(desc(dataListings.createdAt))
       .limit(50);
 
-    return NextResponse.json({ listings });
+    const profiles = await profilesForDocuments(listings.flatMap((l) => l.documentIds));
+    const withProfiles = listings.map((l) => ({
+      ...l,
+      dataProfile: summarizeProfiles(
+        l.documentIds.flatMap((id) => (profiles.has(id) ? [profiles.get(id)!] : []))
+      ),
+    }));
+
+    return NextResponse.json({ listings: withProfiles });
   } catch (error) {
     if (error instanceof Error && error.message === "UNAUTHENTICATED") {
       return NextResponse.json({ error: "Unauthenticated" }, { status: 401 });

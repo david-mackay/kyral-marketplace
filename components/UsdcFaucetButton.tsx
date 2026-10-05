@@ -32,7 +32,7 @@ export function UsdcFaucetButton() {
       });
       await waitForTransactionReceipt(config, { hash });
       setStatus("done");
-      setMessage("1,000 test USDC added to your wallet.");
+      setMessage("$1,000 in test funds added.");
     } catch (error) {
       setStatus("error");
       setMessage(
@@ -49,7 +49,7 @@ export function UsdcFaucetButton() {
         disabled={!address || status === "pending"}
         className="text-emerald-400 hover:text-emerald-300 underline disabled:opacity-50"
       >
-        {status === "pending" ? "Minting test USDC..." : "Get 1,000 test USDC"}
+        {status === "pending" ? "Adding test funds…" : "Add $1,000 test funds"}
       </button>
       {message && (
         <div className={status === "error" ? "text-red-400" : "text-zinc-400"}>
@@ -57,7 +57,7 @@ export function UsdcFaucetButton() {
         </div>
       )}
       <div>
-        Need gas? Get testnet MON from the{" "}
+        Network fees need a little testnet MON from the{" "}
         <a
           href="https://faucet.monad.xyz"
           target="_blank"

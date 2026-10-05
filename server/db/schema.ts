@@ -10,7 +10,10 @@ import {
   uuid,
   pgEnum,
   bigint,
+  boolean,
 } from "drizzle-orm/pg-core";
+
+import type { BountyCriteria, ConsentPurpose, DataProfile } from "@/lib/data-profile";
 
 // ─── Enums ───────────────────────────────────────────────────────────────────
 
@@ -63,6 +66,30 @@ export const contributionStatusEnum = pgEnum("contribution_status", [
   "revoked",
 ]);
 
+export const bountyPurposeEnum = pgEnum("bounty_purpose", [
+  "academic",
+  "nonprofit",
+  "commercial",
+  "pharma",
+]);
+
+export const bountyStatusEnum = pgEnum("bounty_status", [
+  "awaiting_funding",
+  "open",
+  "filled",
+  "closed",
+]);
+
+export const activityKindEnum = pgEnum("activity_kind", [
+  "data_ready",
+  "listed",
+  "bounty_filled",
+  "sale",
+  "withdrawal",
+  "bounty_funded",
+  "bounty_delivery",
+]);
+
 export const purchaseTargetTypeEnum = pgEnum("purchase_target_type", [
   "listing",
   "dataset",
@@ -86,6 +113,13 @@ export const users = pgTable(
     id: uuid("id").primaryKey().defaultRandom(),
     walletAddress: text("wallet_address").notNull(),
     displayName: text("display_name"),
+    consentPurposes: jsonb("consent_purposes")
+      .$type<ConsentPurpose[]>()
+      .notNull()
+      .default(["academic", "nonprofit"]),
+    autoFill: boolean("auto_fill").notNull().default(true),
+    // Per-person offset applied to every date before data leaves Kyral.
+    dateShiftDays: integer("date_shift_days"),
     createdAt: timestamp("created_at").defaultNow().notNull(),
     updatedAt: timestamp("updated_at").defaultNow().notNull(),
   },
@@ -111,6 +145,12 @@ export const documents = pgTable(
     bucket: text("bucket"),
     objectKey: text("object_key"),
     sha256: text("sha256"), // 0x-prefixed hex digest of the file bytes
+    profile: jsonb("profile").$type<DataProfile>(),
+    // De-identified derivative: the only version buyers ever receive.
+    deidObjectKey: text("deid_object_key"),
+    deidSha256: text("deid_sha256"),
+    deidContentType: text("deid_content_type"),
+    deidFileName: text("deid_file_name"),
     status: documentStatusEnum("status").notNull().default("uploaded"),
     createdAt: timestamp("created_at").defaultNow().notNull(),
   },
@@ -258,6 +298,88 @@ export const revenueEvents = pgTable(
   })
 );
 
+// ─── Bounties (researcher data requests) ─────────────────────────────────────
+
+export const bounties = pgTable(
+  "bounties",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    creatorUserId: uuid("creator_user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    title: text("title").notNull(),
+    description: text("description"),
+    organization: text("organization"),
+    purpose: bountyPurposeEnum("purpose").notNull().default("academic"),
+    criteria: jsonb("criteria").$type<BountyCriteria>().notNull(),
+    rewardUsdc: bigint("reward_usdc", { mode: "number" }).notNull(),
+    maxContributors: integer("max_contributors").notNull(),
+    filledCount: integer("filled_count").notNull().default(0),
+    status: bountyStatusEnum("status").notNull().default("awaiting_funding"),
+    fundingTxHash: text("funding_tx_hash"),
+    closesAt: timestamp("closes_at"),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (table) => ({
+    statusIdx: index("bounties_status_idx").on(table.status),
+    creatorIdx: index("bounties_creator_idx").on(table.creatorUserId),
+  })
+);
+
+export const bountyFills = pgTable(
+  "bounty_fills",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    bountyId: uuid("bounty_id")
+      .notNull()
+      .references(() => bounties.id, { onDelete: "cascade" }),
+    contributorUserId: uuid("contributor_user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    documentId: uuid("document_id")
+      .notNull()
+      .references(() => documents.id, { onDelete: "cascade" }),
+    rewardUsdc: bigint("reward_usdc", { mode: "number" }).notNull(),
+    txHash: text("tx_hash"),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (table) => ({
+    oneFillPerPerson: uniqueIndex("bounty_fills_unique").on(
+      table.bountyId,
+      table.contributorUserId
+    ),
+    contributorIdx: index("bounty_fills_contributor_idx").on(
+      table.contributorUserId
+    ),
+  })
+);
+
+// ─── Activity feed ───────────────────────────────────────────────────────────
+
+export const activityEvents = pgTable(
+  "activity_events",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    kind: activityKindEnum("kind").notNull(),
+    title: text("title").notNull(),
+    detail: text("detail"),
+    amountUsdc: bigint("amount_usdc", { mode: "number" }),
+    href: text("href"),
+    txHash: text("tx_hash"),
+    readAt: timestamp("read_at"),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (table) => ({
+    userCreatedIdx: index("activity_events_user_created_idx").on(
+      table.userId,
+      table.createdAt
+    ),
+  })
+);
+
 // ─── Relations ───────────────────────────────────────────────────────────────
 
 export const usersRelations = relations(users, ({ many }) => ({
@@ -267,6 +389,29 @@ export const usersRelations = relations(users, ({ many }) => ({
   contributions: many(datasetContributions),
   purchases: many(purchases),
   revenueEvents: many(revenueEvents),
+}));
+
+export const bountiesRelations = relations(bounties, ({ one, many }) => ({
+  creator: one(users, {
+    fields: [bounties.creatorUserId],
+    references: [users.id],
+  }),
+  fills: many(bountyFills),
+}));
+
+export const bountyFillsRelations = relations(bountyFills, ({ one }) => ({
+  bounty: one(bounties, {
+    fields: [bountyFills.bountyId],
+    references: [bounties.id],
+  }),
+  contributor: one(users, {
+    fields: [bountyFills.contributorUserId],
+    references: [users.id],
+  }),
+  document: one(documents, {
+    fields: [bountyFills.documentId],
+    references: [documents.id],
+  }),
 }));
 
 export const documentsRelations = relations(documents, ({ one }) => ({
@@ -341,3 +486,6 @@ export type Dataset = typeof datasets.$inferSelect;
 export type DatasetContribution = typeof datasetContributions.$inferSelect;
 export type Purchase = typeof purchases.$inferSelect;
 export type RevenueEvent = typeof revenueEvents.$inferSelect;
+export type Bounty = typeof bounties.$inferSelect;
+export type BountyFill = typeof bountyFills.$inferSelect;
+export type ActivityEvent = typeof activityEvents.$inferSelect;

@@ -1,7 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
 import { eq, and, inArray } from "drizzle-orm";
-import archiver from "archiver";
-import { PassThrough } from "node:stream";
 
 import { requireAuthenticatedUser } from "@/server/auth/session";
 import { db } from "@/server/db";
@@ -11,7 +9,8 @@ import {
   datasetContributions,
   documents,
 } from "@/server/db/schema";
-import { getPresignedUrl, getObjectBuffer } from "@/server/storage/s3";
+import { getPresignedUrl } from "@/server/storage/s3";
+import { deliverableFile, zipResponse, type DeliverableFile } from "@/server/delivery";
 
 export const runtime = "nodejs";
 
@@ -79,79 +78,28 @@ export async function GET(
       where: inArray(documents.id, documentIds),
     });
 
-    // For datasets: stream a ZIP archive at runtime
+    const deliverables = docs
+      .map(deliverableFile)
+      .filter((f): f is DeliverableFile => f !== null);
+
     if (purchase.targetType === "dataset") {
-      const passthrough = new PassThrough();
-      const archive = archiver("zip", { zlib: { level: 5 } });
-      archive.pipe(passthrough);
-
-      const usedNames = new Set<string>();
-
-      for (const doc of docs) {
-        if (!doc.objectKey) continue;
-        try {
-          const buffer = await getObjectBuffer({ key: doc.objectKey });
-          let name = doc.originalFileName ?? doc.id;
-          // Deduplicate file names within the ZIP
-          if (usedNames.has(name)) {
-            const ext = name.lastIndexOf(".");
-            const base = ext > 0 ? name.slice(0, ext) : name;
-            const suffix = ext > 0 ? name.slice(ext) : "";
-            let i = 2;
-            while (usedNames.has(`${base}_${i}${suffix}`)) i++;
-            name = `${base}_${i}${suffix}`;
-          }
-          usedNames.add(name);
-          archive.append(buffer, { name });
-        } catch {
-          // Skip files that fail to fetch
-        }
-      }
-
-      void archive.finalize();
-
-      const readableStream = new ReadableStream({
-        start(controller) {
-          passthrough.on("data", (chunk: Buffer) => {
-            controller.enqueue(new Uint8Array(chunk));
-          });
-          passthrough.on("end", () => {
-            controller.close();
-          });
-          passthrough.on("error", (err) => {
-            controller.error(err);
-          });
-        },
-      });
-
-      return new Response(readableStream, {
-        headers: {
-          "Content-Type": "application/zip",
-          "Content-Disposition": `attachment; filename="dataset-${purchase.targetId.slice(0, 8)}.zip"`,
-        },
-      });
+      return zipResponse(deliverables, `dataset-${purchase.targetId.slice(0, 8)}.zip`);
     }
 
-    // For individual listings: return presigned URLs as before
     const files = await Promise.all(
-      docs.map(async (doc) => {
+      deliverables.map(async (file) => {
         let downloadUrl: string | null = null;
-        if (doc.objectKey) {
-          try {
-            downloadUrl = await getPresignedUrl({
-              key: doc.objectKey,
-              expiresInSeconds: 3600,
-            });
-          } catch {
-            // URL generation failed
-          }
+        try {
+          downloadUrl = await getPresignedUrl({ key: file.key, expiresInSeconds: 3600 });
+        } catch {
+          // URL generation failed
         }
-
+        const doc = docs.find((d) => d.id === file.documentId);
         return {
-          id: doc.id,
-          fileName: doc.originalFileName,
-          contentType: doc.contentType,
-          sizeBytes: doc.sizeBytes,
+          id: file.documentId,
+          fileName: file.fileName,
+          contentType: file.contentType,
+          sizeBytes: doc?.sizeBytes ?? 0,
           downloadUrl,
         };
       })

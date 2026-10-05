@@ -12,6 +12,7 @@ import {
   purchases,
 } from "@/server/db/schema";
 import { syncItemSafe } from "@/server/monad/marketplace";
+import { profilesForDocuments, summarizeProfiles } from "@/server/profile-summary";
 
 export const runtime = "nodejs";
 
@@ -74,7 +75,10 @@ export async function GET(
       where: eq(datasetContributions.listingId, id),
     });
 
-    return NextResponse.json({ listing, contributions });
+    const profiles = await profilesForDocuments(listing.documentIds);
+    const dataProfile = summarizeProfiles([...profiles.values()]);
+
+    return NextResponse.json({ listing: { ...listing, dataProfile }, contributions });
   } catch (error) {
     console.error("/api/listings/[id] GET error", error);
     return NextResponse.json(

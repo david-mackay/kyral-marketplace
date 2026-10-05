@@ -5,6 +5,7 @@ import { requireAuthenticatedUser } from "@/server/auth/session";
 import { db } from "@/server/db";
 import { documents } from "@/server/db/schema";
 import { getBucketName, putObject } from "@/server/storage/s3";
+import { sha256Hex } from "@/server/monad/provenance";
 
 export const runtime = "nodejs";
 
@@ -62,6 +63,7 @@ export async function POST(req: NextRequest) {
         sizeBytes,
         bucket,
         objectKey,
+        sha256: sha256Hex(buffer),
         status: "uploaded",
       })
       .returning()

@@ -6,7 +6,7 @@ import {
   createSessionToken,
   setSessionCookie,
 } from "@/server/auth/session";
-import { verifySolanaAuthSignature } from "@/server/auth/verify-signature";
+import { verifyWalletAuthSignature } from "@/server/auth/verify-signature";
 
 export const runtime = "nodejs";
 
@@ -49,7 +49,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const verifiedAddress = verifySolanaAuthSignature(
+    const verifiedAddress = await verifyWalletAuthSignature(
       walletAddress,
       message,
       signature

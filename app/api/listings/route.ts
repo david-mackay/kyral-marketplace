@@ -5,6 +5,7 @@ import { z } from "zod";
 import { requireAuthenticatedUser, getAuthenticatedUser } from "@/server/auth/session";
 import { db } from "@/server/db";
 import { dataListings, users } from "@/server/db/schema";
+import { syncItemSafe } from "@/server/monad/marketplace";
 
 export const runtime = "nodejs";
 
@@ -113,6 +114,10 @@ export async function POST(req: NextRequest) {
       })
       .returning()
       .then((rows) => rows[0]);
+
+    if (listing?.status === "active") {
+      await syncItemSafe("listing", listing.id);
+    }
 
     return NextResponse.json({ ok: true, listing });
   } catch (error) {

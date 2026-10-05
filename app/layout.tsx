@@ -17,7 +17,7 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "Kyral Marketplace",
   description:
-    "Decentralized health data marketplace on Solana. Own, lend, and invest your health data.",
+    "Health data marketplace on Monad. Own your data, prove its provenance, and get paid onchain when it is used.",
 };
 
 export default function RootLayout({

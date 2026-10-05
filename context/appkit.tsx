@@ -2,12 +2,12 @@
 
 import { type ReactNode } from "react";
 import { createAppKit } from "@reown/appkit/react";
-import { SolanaAdapter } from "@reown/appkit-adapter-solana/react";
-import { solana, solanaDevnet } from "@reown/appkit/networks";
-import {
-  PhantomWalletAdapter,
-  SolflareWalletAdapter,
-} from "@solana/wallet-adapter-wallets";
+import { WagmiAdapter } from "@reown/appkit-adapter-wagmi";
+import { defineChain } from "@reown/appkit/networks";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { WagmiProvider } from "wagmi";
+
+import { monadChain } from "@/lib/chain";
 
 interface AppKitProviderProps {
   children: ReactNode;
@@ -37,7 +37,7 @@ const createMetadata = () => {
   const baseUrl = getBaseUrl();
   return {
     name: "Kyral Marketplace",
-    description: "Decentralized health data marketplace on Solana",
+    description: "Own, sell, and pool your health data on Monad",
     url: baseUrl,
     icons: [`${baseUrl}/favicon.ico`],
   };
@@ -45,15 +45,23 @@ const createMetadata = () => {
 
 const metadata = createMetadata();
 
-const solanaAdapter = new SolanaAdapter({
-  wallets: [new PhantomWalletAdapter(), new SolflareWalletAdapter()],
+const monad = defineChain({
+  ...monadChain,
+  chainNamespace: "eip155",
+  caipNetworkId: `eip155:${monadChain.id}`,
+});
+
+export const wagmiAdapter = new WagmiAdapter({
+  projectId: projectId ?? "",
+  networks: [monad],
+  ssr: true,
 });
 
 export const reownAppKit = createAppKit({
-  adapters: [solanaAdapter],
+  adapters: [wagmiAdapter],
   projectId: projectId ?? "",
-  networks: [solana, solanaDevnet],
-  defaultNetwork: solana,
+  networks: [monad],
+  defaultNetwork: monad,
   metadata,
   features: {
     email: true,
@@ -61,6 +69,12 @@ export const reownAppKit = createAppKit({
   },
 });
 
+const queryClient = new QueryClient();
+
 export function AppKitProvider({ children }: AppKitProviderProps) {
-  return <>{children}</>;
+  return (
+    <WagmiProvider config={wagmiAdapter.wagmiConfig}>
+      <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+    </WagmiProvider>
+  );
 }

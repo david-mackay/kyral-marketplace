@@ -1,15 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import {
-  useAppKitAccount,
-  useAppKitProvider,
-} from "@reown/appkit/react";
-import { useDisconnect } from "@reown/appkit/react";
-
-interface SolanaSigner {
-  signMessage(message: Uint8Array): Promise<Uint8Array>;
-}
+import { useAppKitAccount, useDisconnect } from "@reown/appkit/react";
+import { useSignMessage } from "wagmi";
+import type { Address } from "viem";
 
 type AuthStatus =
   | "checking"
@@ -37,9 +31,7 @@ const initialState: AuthState = {
 
 export function useWalletAuth() {
   const { address, isConnected } = useAppKitAccount();
-  const { walletProvider } = useAppKitProvider<SolanaSigner | undefined>(
-    "solana"
-  );
+  const { signMessageAsync } = useSignMessage();
   const { disconnect: disconnectWallet } = useDisconnect();
   const [state, setState] = useState<AuthState>(initialState);
 
@@ -100,7 +92,7 @@ export function useWalletAuth() {
 
   // ── Core authenticate function (called at most once per address) ─
   const authenticate = useCallback(
-    async (wallet: string, signer: SolanaSigner) => {
+    async (wallet: string) => {
       // Concurrency lock
       if (isAuthenticatingRef.current) return;
       isAuthenticatingRef.current = true;
@@ -114,14 +106,12 @@ export function useWalletAuth() {
         const { message } = (await nonceRes.json()) as { message: string };
 
         // 2. Sign with wallet (single signature prompt)
-        const encodedMessage = new TextEncoder().encode(message);
-        const signature = await signer.signMessage(encodedMessage);
+        const signature = await signMessageAsync({
+          account: wallet as Address,
+          message,
+        });
 
         // 3. Verify on server and create session
-        const sigBytes = new Uint8Array(signature);
-        const signatureBase64 = btoa(
-          String.fromCharCode.apply(null, Array.from(sigBytes))
-        );
 
         const res = await fetch("/api/auth/session", {
           method: "POST",
@@ -130,7 +120,7 @@ export function useWalletAuth() {
           body: JSON.stringify({
             walletAddress: wallet,
             message,
-            signature: signatureBase64,
+            signature,
           }),
         });
 
@@ -158,7 +148,7 @@ export function useWalletAuth() {
         isAuthenticatingRef.current = false;
       }
     },
-    []
+    [signMessageAsync]
   );
 
   // ── React to wallet connection changes ───────────────────────────
@@ -185,7 +175,7 @@ export function useWalletAuth() {
     // Already authenticated for this address
     if (
       state.status === "authenticated" &&
-      state.user?.walletAddress === address
+      state.user?.walletAddress.toLowerCase() === address.toLowerCase()
     ) {
       hasAttemptedForAddressRef.current = address;
       return;
@@ -197,13 +187,10 @@ export function useWalletAuth() {
     // Already in progress
     if (isAuthenticatingRef.current) return;
 
-    // Wallet connected but signer not ready yet — wait
-    if (!walletProvider?.signMessage) return;
-
     // All conditions met: trigger a single authenticate
     hasAttemptedForAddressRef.current = address;
-    void authenticate(address, walletProvider);
-  }, [isConnected, address, walletProvider, state.status, state.user?.walletAddress, authenticate]);
+    void authenticate(address);
+  }, [isConnected, address, state.status, state.user, authenticate]);
 
   const logout = useCallback(async () => {
     hasAttemptedForAddressRef.current = null;
@@ -259,10 +246,10 @@ export function useWalletAuth() {
 
   // Allow manual retry after error
   const retryAuth = useCallback(() => {
-    if (!isConnected || !address || !walletProvider?.signMessage) return;
+    if (!isConnected || !address) return;
     hasAttemptedForAddressRef.current = null;
-    void authenticate(address, walletProvider);
-  }, [isConnected, address, walletProvider, authenticate]);
+    void authenticate(address);
+  }, [isConnected, address, authenticate]);
 
   return useMemo(
     () => ({

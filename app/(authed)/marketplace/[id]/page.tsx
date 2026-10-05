@@ -2,9 +2,10 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useParams, useSearchParams, useRouter } from "next/navigation";
+import { useAppKitAccount } from "@reown/appkit/react";
+import { useConfig } from "wagmi";
+import type { Address } from "viem";
 import { useWalletAuth } from "@/hooks/useWalletAuth";
-import { useAppKitConnection } from "@reown/appkit-adapter-solana/react";
-import { useAppKitProvider } from "@reown/appkit/react";
 import { LoadingDots } from "@/components/LoadingDots";
 import {
   formatUsdc,
@@ -12,7 +13,9 @@ import {
   formatDate,
   CATEGORY_LABELS,
 } from "@/lib/format";
-import { buildUsdcTransferTransaction } from "@/lib/build-usdc-transfer";
+import { payForItem } from "@/lib/purchase";
+import { addressUrl, MARKETPLACE_ADDRESS, txUrl, USDC_HAS_FAUCET } from "@/lib/chain";
+import { UsdcFaucetButton } from "@/components/UsdcFaucetButton";
 import Link from "next/link";
 
 export default function MarketplaceDetailPage() {
@@ -22,8 +25,8 @@ export default function MarketplaceDetailPage() {
   const id = params.id as string;
   const type = searchParams.get("type") ?? "listing";
   const { user } = useWalletAuth();
-  const { connection } = useAppKitConnection();
-  const { walletProvider } = useAppKitProvider("solana");
+  const { address, isConnected } = useAppKitAccount();
+  const wagmiConfig = useConfig();
 
   const [data, setData] = useState<Record<string, unknown> | null>(null);
   const [contributions, setContributions] = useState<
@@ -33,6 +36,7 @@ export default function MarketplaceDetailPage() {
   const [purchasing, setPurchasing] = useState(false);
   const [purchaseError, setPurchaseError] = useState<string | null>(null);
   const [purchased, setPurchased] = useState(false);
+  const [purchaseTx, setPurchaseTx] = useState<string | null>(null);
   const [myListings, setMyListings] = useState<{ id: string; title: string; category: string }[]>([]);
   const [contributing, setContributing] = useState<string | null>(null);
   const [contributeError, setContributeError] = useState<string | null>(null);
@@ -87,27 +91,15 @@ export default function MarketplaceDetailPage() {
   }, [loadData]);
 
   const handlePurchase = useCallback(async () => {
-    if (!data || !user?.walletAddress || !connection || !walletProvider) {
+    if (!data || !isConnected || !address) {
       setPurchaseError("Wallet not connected");
-      return;
-    }
-
-    const provider = walletProvider as {
-      signAndSendTransaction?: (tx: unknown, opts?: { skipPreflight?: boolean }) => Promise<string>;
-      sendTransaction?: (tx: unknown, conn: unknown) => Promise<string>;
-    };
-
-    const signAndSend =
-      provider.signAndSendTransaction ?? provider.sendTransaction;
-    if (!signAndSend) {
-      setPurchaseError("Wallet does not support sending transactions");
       return;
     }
 
     setPurchasing(true);
     setPurchaseError(null);
     try {
-      // Step 1: Initiate purchase
+      // Step 1: Server syncs the item onchain and returns a quote
       const initRes = await fetch("/api/purchases/initiate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -122,56 +114,18 @@ export default function MarketplaceDetailPage() {
         throw new Error(err.error || "Failed to initiate purchase");
       }
 
-      const { purchase, escrowAddress, amountUsdc, usdcMint } = await initRes.json();
+      const { purchase, ...quote } = await initRes.json();
 
-      // Step 2: Build USDC transfer transaction (user -> escrow)
-      const transaction = await buildUsdcTransferTransaction({
-        connection,
-        senderAddress: user.walletAddress,
-        recipientAddress: escrowAddress,
-        amountSmallestUnit: amountUsdc,
-        usdcMint,
-      });
+      // Step 2: Pay the marketplace contract (revenue is split onchain)
+      const txHash = await payForItem(wagmiConfig, address as Address, quote);
 
-      // Step 3: User signs and sends transaction
-      // Prefer signAndSendTransaction (wallet handles full flow); fallback to window.solana
-      // for Phantom/Solflare when Reown provider has signTransaction issues
-      let txSignature: string;
-      const injectedWallet =
-        typeof window !== "undefined"
-          ? (window as unknown as {
-              solana?: {
-                signAndSendTransaction?: (
-                  tx: unknown
-                ) => Promise<{ signature: string } | string>;
-              };
-            }).solana
-          : undefined;
-
-      if (injectedWallet?.signAndSendTransaction) {
-        const result = await injectedWallet.signAndSendTransaction(transaction);
-        txSignature =
-          typeof result === "string" ? result : (result as { signature: string }).signature;
-      } else if (provider.signAndSendTransaction) {
-        txSignature = await provider.signAndSendTransaction(transaction, {
-          skipPreflight: false,
-        });
-      } else if (provider.sendTransaction) {
-        txSignature = await provider.sendTransaction(transaction, connection);
-      } else {
-        throw new Error("No transaction signing method available");
-      }
-      if (!txSignature) {
-        throw new Error("Transaction was not sent");
-      }
-
-      // Step 4: Confirm purchase on backend (verifies tx, distributes revenue)
+      // Step 3: Server verifies the Purchased event and records access
       const confirmRes = await fetch("/api/purchases/confirm", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           purchaseId: purchase.id,
-          txSignature,
+          txHash,
         }),
       });
 
@@ -180,15 +134,18 @@ export default function MarketplaceDetailPage() {
         throw new Error(err.error || "Failed to confirm purchase");
       }
 
+      setPurchaseTx(txHash);
       setPurchased(true);
     } catch (error) {
       setPurchaseError(
-        error instanceof Error ? error.message : "Purchase failed"
+        error instanceof Error
+          ? (error as { shortMessage?: string }).shortMessage ?? error.message
+          : "Purchase failed"
       );
     } finally {
       setPurchasing(false);
     }
-  }, [data, id, type, user?.walletAddress, connection, walletProvider]);
+  }, [data, id, type, isConnected, address, wagmiConfig]);
 
   const handleContribute = useCallback(
     async (listingId: string) => {
@@ -397,6 +354,13 @@ export default function MarketplaceDetailPage() {
           ) : null}
         </div>
 
+        <ProvenancePanel
+          contentHash={data.onchainContentHash as string | null}
+          version={data.onchainVersion as number | null}
+          txHash={data.onchainTxHash as string | null}
+          type={type}
+        />
+
         {/* Contributors list for datasets */}
         {type === "dataset" && contributions.length > 0 && (
           <div>
@@ -542,6 +506,16 @@ export default function MarketplaceDetailPage() {
               Your purchase has been confirmed. Access your data from the
               dashboard.
             </div>
+            {purchaseTx && (
+              <a
+                href={txUrl(purchaseTx)}
+                target="_blank"
+                rel="noreferrer"
+                className="inline-block text-xs text-emerald-400 underline hover:text-emerald-300"
+              >
+                View settlement on MonadVision
+              </a>
+            )}
           </div>
         ) : isOwner && type === "listing" ? (
           <div className="text-center text-xs text-zinc-500 py-2">
@@ -572,6 +546,8 @@ export default function MarketplaceDetailPage() {
           </button>
         )}
 
+        {!purchased && USDC_HAS_FAUCET && <UsdcFaucetButton />}
+
         {isOwner && (
           <button
             onClick={() => void handleDelete()}
@@ -588,6 +564,61 @@ export default function MarketplaceDetailPage() {
           </button>
         )}
       </div>
+    </div>
+  );
+}
+
+function ProvenancePanel({
+  contentHash,
+  version,
+  txHash,
+  type,
+}: {
+  contentHash: string | null;
+  version: number | null;
+  txHash: string | null;
+  type: string;
+}) {
+  return (
+    <div className="rounded-lg border border-violet-500/20 bg-violet-500/5 px-4 py-3 space-y-1.5">
+      <div className="flex items-center justify-between">
+        <h2 className="text-sm font-semibold text-zinc-200">
+          Onchain provenance
+        </h2>
+        <a
+          href={addressUrl(MARKETPLACE_ADDRESS)}
+          target="_blank"
+          rel="noreferrer"
+          className="text-xs text-violet-300 hover:underline"
+        >
+          Monad contract
+        </a>
+      </div>
+      {contentHash && txHash ? (
+        <>
+          <p className="text-xs text-zinc-400">
+            {type === "dataset"
+              ? "A commitment to every contributor's files and the payout split is anchored on Monad. Revenue is divided by the contract at purchase."
+              : "A fingerprint of these files and the owner's payout address is anchored on Monad. Payment goes to the contract, never to Kyral."}
+          </p>
+          <div className="font-mono text-[11px] text-zinc-500 break-all">
+            {contentHash}
+          </div>
+          <a
+            href={txUrl(txHash)}
+            target="_blank"
+            rel="noreferrer"
+            className="inline-block text-xs text-violet-300 hover:underline"
+          >
+            Version {version ?? 1} anchor transaction
+          </a>
+        </>
+      ) : (
+        <p className="text-xs text-zinc-500">
+          Not anchored yet. It will be registered on Monad when it becomes
+          purchasable.
+        </p>
+      )}
     </div>
   );
 }

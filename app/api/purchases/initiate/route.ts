@@ -10,7 +10,8 @@ import {
   datasetContributions,
   purchases,
 } from "@/server/db/schema";
-import { getEscrowKeypair, getUsdcMint } from "@/server/solana/config";
+import { syncItem } from "@/server/monad/marketplace";
+import { MARKETPLACE_ADDRESS, USDC_ADDRESS, purchaseRefFor } from "@/lib/chain";
 
 export const runtime = "nodejs";
 
@@ -70,6 +71,16 @@ export async function POST(req: NextRequest) {
       amountUsdc = dataset.priceUsdc;
     }
 
+    // The contract is the source of truth for price and payout split, so make
+    // sure it reflects the current listing/dataset before the buyer pays.
+    const onchain = await syncItem(targetType, targetId);
+    if (!onchain.purchasable) {
+      return NextResponse.json(
+        { error: "This item is not available for purchase" },
+        { status: 400 }
+      );
+    }
+
     // Create purchase record
     const purchase = await db
       .insert(purchases)
@@ -83,15 +94,13 @@ export async function POST(req: NextRequest) {
       .returning()
       .then((rows) => rows[0]);
 
-    // Return escrow info for the client to build the transfer
-    const escrow = getEscrowKeypair();
-    const escrowAddress = escrow.publicKey.toBase58();
-
     return NextResponse.json({
       purchase,
-      escrowAddress,
       amountUsdc,
-      usdcMint: getUsdcMint(),
+      itemId: onchain.itemId,
+      purchaseRef: purchaseRefFor(purchase.id),
+      marketplaceAddress: MARKETPLACE_ADDRESS,
+      usdcAddress: USDC_ADDRESS,
     });
   } catch (error) {
     if (error instanceof Error && error.message === "UNAUTHENTICATED") {

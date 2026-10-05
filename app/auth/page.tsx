@@ -26,7 +26,7 @@ export default function AuthPage() {
             Connect to Kyral
           </h1>
           <p className="mt-2 text-sm text-zinc-500">
-            Connect your Solana wallet to access the health data marketplace.
+            Sign in to access the health data marketplace.
           </p>
         </div>
 
@@ -66,8 +66,8 @@ export default function AuthPage() {
 
               <div className="text-center py-4">
                 <p className="text-sm text-zinc-400 mb-6">
-                  Click the button below to connect your wallet. We support
-                  Phantom, Solflare, and other Solana wallets.
+                  Sign in with email, Google, Apple, or any EVM wallet
+                  (MetaMask, Rabby, Phantom, and more).
                 </p>
 
                 {/* Reown AppKit connect button */}

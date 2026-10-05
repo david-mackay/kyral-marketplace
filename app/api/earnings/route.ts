@@ -4,6 +4,7 @@ import { eq, desc } from "drizzle-orm";
 import { requireAuthenticatedUser } from "@/server/auth/session";
 import { db } from "@/server/db";
 import { revenueEvents } from "@/server/db/schema";
+import { readClaimable } from "@/server/monad/marketplace";
 
 export const runtime = "nodejs";
 
@@ -16,10 +17,8 @@ export async function GET() {
       orderBy: [desc(revenueEvents.createdAt)],
     });
 
-    // "pending" = claimable (entitlement recorded, not yet withdrawn)
-    const availableBalance = events
-      .filter((e) => e.status === "pending")
-      .reduce((sum, e) => sum + e.amountUsdc, 0);
+    // Claimable balance is held by the marketplace contract, not the DB.
+    const availableBalance = Number(await readClaimable(user.walletAddress));
 
     // "confirmed" = successfully withdrawn
     const totalWithdrawn = events

@@ -68,6 +68,16 @@ export const purchaseTargetTypeEnum = pgEnum("purchase_target_type", [
   "dataset",
 ]);
 
+// Mirror of the item's last state anchored in KyralMarketplace.
+function onchainColumns() {
+  return {
+    onchainContentHash: text("onchain_content_hash"),
+    onchainVersion: integer("onchain_version"),
+    onchainTxHash: text("onchain_tx_hash"),
+    onchainSyncedAt: timestamp("onchain_synced_at"),
+  };
+}
+
 // ─── Users ───────────────────────────────────────────────────────────────────
 
 export const users = pgTable(
@@ -100,6 +110,7 @@ export const documents = pgTable(
     sizeBytes: integer("size_bytes").notNull(),
     bucket: text("bucket"),
     objectKey: text("object_key"),
+    sha256: text("sha256"), // 0x-prefixed hex digest of the file bytes
     status: documentStatusEnum("status").notNull().default("uploaded"),
     createdAt: timestamp("created_at").defaultNow().notNull(),
   },
@@ -123,6 +134,7 @@ export const dataListings = pgTable(
     documentIds: jsonb("document_ids").$type<string[]>().notNull().default([]),
     priceUsdc: bigint("price_usdc", { mode: "number" }).notNull(), // in USDC smallest unit (6 decimals)
     status: listingStatusEnum("status").notNull().default("draft"),
+    ...onchainColumns(),
     createdAt: timestamp("created_at").defaultNow().notNull(),
     updatedAt: timestamp("updated_at").defaultNow().notNull(),
   },
@@ -148,6 +160,7 @@ export const datasets = pgTable(
     priceUsdc: bigint("price_usdc", { mode: "number" }).notNull(),
     status: datasetStatusEnum("status").notNull().default("open"),
     totalContributions: integer("total_contributions").notNull().default(0),
+    ...onchainColumns(),
     createdAt: timestamp("created_at").defaultNow().notNull(),
     updatedAt: timestamp("updated_at").defaultNow().notNull(),
   },

@@ -4,7 +4,7 @@ import { eq, and, desc, gte, countDistinct } from "drizzle-orm";
 import { requireAuthenticatedUser } from "@/server/auth/session";
 import { db } from "@/server/db";
 import { revenueEvents } from "@/server/db/schema";
-import { sendUsdcFromEscrow } from "@/server/solana/usdc";
+import { readClaimable, relayClaim } from "@/server/monad/marketplace";
 
 export const runtime = "nodejs";
 
@@ -19,7 +19,7 @@ function startOfUtcDay(): Date {
 
 /**
  * GET /api/withdrawals
- * Returns the user's withdrawal history (confirmed revenue events with tx signatures).
+ * Returns the user's withdrawal history and their onchain claimable balance.
  */
 export async function GET() {
   try {
@@ -30,9 +30,7 @@ export async function GET() {
       orderBy: [desc(revenueEvents.createdAt)],
     });
 
-    const availableBalance = events
-      .filter((e) => e.status === "pending")
-      .reduce((sum, e) => sum + e.amountUsdc, 0);
+    const availableBalance = Number(await readClaimable(user.walletAddress));
 
     const withdrawals = events.filter(
       (e) => e.status === "confirmed" || e.status === "sent"
@@ -53,7 +51,9 @@ export async function GET() {
 
 /**
  * POST /api/withdrawals
- * Withdraw all available (pending) earnings to the user's wallet.
+ * Withdraw all claimable earnings to the user's wallet. The server relays
+ * KyralMarketplace.claimFor (paying gas), and the contract sends USDC straight
+ * to the user's wallet.
  *
  * Security properties:
  *  - Authenticated: session JWT required; recipient wallet comes from the
@@ -149,15 +149,12 @@ export async function POST() {
 
     const { eventIds, totalAmount } = claimResult;
 
-    // ── Solana transfer phase ─────────────────────────────────────────────────
-    // This runs outside the DB transaction intentionally: the transfer can take
-    // several seconds and we must not hold the DB connection / locks that long.
-    let txSignature: string;
+    // ── Onchain claim phase ───────────────────────────────────────────────────
+    // Runs outside the DB transaction so we don't hold row locks while waiting
+    // for the receipt.
+    let claimed: Awaited<ReturnType<typeof relayClaim>>;
     try {
-      txSignature = await sendUsdcFromEscrow({
-        recipientWallet: user.walletAddress,
-        amountSmallestUnit: totalAmount,
-      });
+      claimed = await relayClaim(user.walletAddress);
     } catch (error) {
       // Revert events to pending and clear withdrawnAt so the user can retry
       // and so this failed attempt does not count against their daily limit.
@@ -167,25 +164,26 @@ export async function POST() {
           .set({ status: "pending", withdrawnAt: null })
           .where(eq(revenueEvents.id, eventId));
       }
-      console.error("Withdrawal escrow transfer failed", error);
+      console.error("Withdrawal claim failed", error);
       return NextResponse.json(
-        { error: "Failed to send USDC from escrow. Please try again." },
+        { error: "Failed to claim USDC from the marketplace contract. Please try again." },
         { status: 500 }
       );
     }
 
-    // Mark all events as confirmed with the on-chain tx signature.
+    // A null txHash means the balance was already claimed directly from the
+    // contract by the user's own wallet.
     for (const eventId of eventIds) {
       await db
         .update(revenueEvents)
-        .set({ status: "confirmed", txSignature })
+        .set({ status: "confirmed", txSignature: claimed.txHash })
         .where(eq(revenueEvents.id, eventId));
     }
 
     return NextResponse.json({
       ok: true,
-      amountUsdc: totalAmount,
-      txSignature,
+      amountUsdc: claimed.txHash ? Number(claimed.amount) : totalAmount,
+      txHash: claimed.txHash,
       eventsSettled: eventIds.length,
     });
   } catch (error) {

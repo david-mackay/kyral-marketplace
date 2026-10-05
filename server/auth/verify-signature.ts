@@ -1,19 +1,22 @@
-import nacl from "tweetnacl";
-import bs58 from "bs58";
+import { getAddress, isAddress, isHex } from "viem";
+
+import { getPublicClient } from "@/server/monad/config";
 
 const MESSAGE_REGEX =
   /^Sign in to Kyral Marketplace\n\nTimestamp: (\d+)\nNonce: ([a-f0-9]+)$/;
 const MAX_AGE_SECONDS = 5 * 60; // 5 minutes
 
 /**
- * Verifies a Solana Ed25519 signature for auth.
- * Returns the wallet address if valid, null otherwise.
+ * Verifies an EIP-191 personal_sign signature for auth. Smart-account wallets
+ * (ERC-1271 / ERC-6492, e.g. Reown email and social logins) are verified
+ * against the chain.
+ * Returns the checksummed wallet address if valid, null otherwise.
  */
-export function verifySolanaAuthSignature(
+export async function verifyWalletAuthSignature(
   walletAddress: string,
   message: string,
-  signatureBase64: string
-): string | null {
+  signature: string
+): Promise<string | null> {
   try {
     const match = message.match(MESSAGE_REGEX);
     if (!match) return null;
@@ -25,21 +28,16 @@ export function verifySolanaAuthSignature(
       return null;
     }
 
-    const publicKey = bs58.decode(walletAddress);
-    if (publicKey.length !== 32) return null;
+    if (!isAddress(walletAddress) || !isHex(signature)) return null;
+    const address = getAddress(walletAddress);
 
-    const signature = Buffer.from(signatureBase64, "base64");
-    if (signature.length !== 64) return null;
+    const isValid = await getPublicClient().verifyMessage({
+      address,
+      message,
+      signature,
+    });
 
-    const messageBytes = new TextEncoder().encode(message);
-
-    const isValid = nacl.sign.detached.verify(
-      messageBytes,
-      new Uint8Array(signature),
-      new Uint8Array(publicKey)
-    );
-
-    return isValid ? walletAddress : null;
+    return isValid ? address : null;
   } catch {
     return null;
   }

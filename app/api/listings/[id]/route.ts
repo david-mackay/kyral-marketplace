@@ -11,6 +11,7 @@ import {
   datasetContributions,
   purchases,
 } from "@/server/db/schema";
+import { syncItemSafe } from "@/server/monad/marketplace";
 
 export const runtime = "nodejs";
 
@@ -52,6 +53,9 @@ export async function GET(
         documentIds: dataListings.documentIds,
         priceUsdc: dataListings.priceUsdc,
         status: dataListings.status,
+        onchainContentHash: dataListings.onchainContentHash,
+        onchainVersion: dataListings.onchainVersion,
+        onchainTxHash: dataListings.onchainTxHash,
         createdAt: dataListings.createdAt,
         ownerWallet: users.walletAddress,
         ownerName: users.displayName,
@@ -113,6 +117,8 @@ export async function PATCH(
       .where(eq(dataListings.id, id))
       .returning()
       .then((rows) => rows[0]);
+
+    await syncItemSafe("listing", id);
 
     return NextResponse.json({ ok: true, listing: updated });
   } catch (error) {
@@ -196,6 +202,11 @@ export async function DELETE(
 
     // Cascade deletes the contribution rows via FK
     await db.delete(dataListings).where(eq(dataListings.id, id));
+
+    await syncItemSafe("listing", id);
+    for (const datasetId of affectedDatasetIds) {
+      await syncItemSafe("dataset", datasetId);
+    }
 
     return NextResponse.json({ ok: true });
   } catch (error) {

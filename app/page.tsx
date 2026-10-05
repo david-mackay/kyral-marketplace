@@ -13,7 +13,7 @@ export default function HomePage() {
           <div className="max-w-3xl">
             <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full border border-emerald-500/30 bg-emerald-500/10 text-emerald-400 text-xs font-medium mb-8">
               <div className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
-              Built on Solana
+              Built on Monad
             </div>
             <h1 className="text-4xl sm:text-5xl lg:text-6xl font-bold tracking-tight text-zinc-50 leading-[1.1]">
               Corporations are earning over{" "}
@@ -42,7 +42,7 @@ export default function HomePage() {
                 Explore Marketplace
               </Link>
             </div>
-            <p className="mt-6 text-xs text-zinc-600">Built on Solana</p>
+            <p className="mt-6 text-xs text-zinc-600">Built on Monad</p>
           </div>
         </div>
       </section>
@@ -128,7 +128,7 @@ export default function HomePage() {
             Stop participating. Start earning.
           </h2>
           <p className="mt-4 text-zinc-400 max-w-lg mx-auto leading-relaxed">
-            Connect your Solana wallet, upload your records, and get paid when
+            Sign in with email or any wallet, upload your records, and get paid when
             researchers use your data. Takes under a minute.
           </p>
           <div className="mt-8 flex flex-col sm:flex-row gap-4 justify-center">

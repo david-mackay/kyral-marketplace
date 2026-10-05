@@ -9,6 +9,7 @@ import {
   dataListings,
   datasetContributions,
 } from "@/server/db/schema";
+import { syncItemSafe } from "@/server/monad/marketplace";
 
 const RevokeSchema = z.object({
   listingId: z.string().uuid(),
@@ -108,6 +109,8 @@ export async function POST(
       })
       .where(eq(datasets.id, datasetId));
 
+    await syncItemSafe("dataset", datasetId);
+
     return NextResponse.json({ ok: true, contribution });
   } catch (error) {
     if (error instanceof Error && error.message === "UNAUTHENTICATED") {
@@ -165,6 +168,8 @@ export async function DELETE(
         updatedAt: new Date(),
       })
       .where(eq(datasets.id, datasetId));
+
+    await syncItemSafe("dataset", datasetId);
 
     return NextResponse.json({ ok: true });
   } catch (error) {

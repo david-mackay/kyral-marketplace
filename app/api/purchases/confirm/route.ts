@@ -1,30 +1,25 @@
 import { NextRequest, NextResponse } from "next/server";
-import { eq, and } from "drizzle-orm";
+import { eq, and, inArray } from "drizzle-orm";
+import { getAddress, type Hex } from "viem";
 import { z } from "zod";
 
 import { requireAuthenticatedUser } from "@/server/auth/session";
 import { db } from "@/server/db";
-import {
-  purchases,
-  dataListings,
-  datasetContributions,
-  revenueEvents,
-} from "@/server/db/schema";
-import { verifyUsdcTransfer } from "@/server/solana/usdc";
-import { getPlatformFeeBps } from "@/server/solana/config";
+import { purchases, revenueEvents, users } from "@/server/db/schema";
+import { verifyPurchase, type VerifiedPurchase } from "@/server/monad/marketplace";
 
 export const runtime = "nodejs";
 
 const ConfirmSchema = z.object({
   purchaseId: z.string().uuid(),
-  txSignature: z.string().min(1),
+  txHash: z.string().regex(/^0x[0-9a-fA-F]{64}$/),
 });
 
 export async function POST(req: NextRequest) {
   try {
     const user = await requireAuthenticatedUser();
     const body = await req.json();
-    const { purchaseId, txSignature } = ConfirmSchema.parse(body);
+    const { purchaseId, txHash } = ConfirmSchema.parse(body);
 
     // Verify the purchase belongs to this user and is pending
     const purchase = await db.query.purchases.findFirst({
@@ -42,18 +37,21 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Verify the transaction on-chain (waits for confirmation)
-    const verification = await verifyUsdcTransfer({
-      txSignature,
-      expectedFromWallet: user.walletAddress,
-      expectedAmountUsdc: purchase.amountUsdc,
+    // Waits for the receipt, then checks the Purchased event matches this
+    // order, item, and buyer.
+    const verification = await verifyPurchase({
+      txHash: txHash as Hex,
+      purchaseId: purchase.id,
+      type: purchase.targetType,
+      targetId: purchase.targetId,
+      buyer: user.walletAddress,
     });
 
-    if (!verification.verified) {
+    if (!verification) {
       await db
         .update(purchases)
-        .set({ status: "failed", txSignature })
-        .where(eq(purchases.id, purchaseId));
+        .set({ status: "failed", txSignature: txHash })
+        .where(and(eq(purchases.id, purchaseId), eq(purchases.status, "pending")));
 
       return NextResponse.json(
         { error: "Transaction verification failed" },
@@ -61,21 +59,22 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Mark purchase as confirmed
-    await db
+    // Conditional update so concurrent confirms can't both record revenue.
+    const [confirmed] = await db
       .update(purchases)
-      .set({ status: "confirmed", txSignature })
-      .where(eq(purchases.id, purchaseId));
+      .set({
+        status: "confirmed",
+        txSignature: txHash,
+        amountUsdc: Number(verification.price),
+      })
+      .where(and(eq(purchases.id, purchaseId), eq(purchases.status, "pending")))
+      .returning();
 
-    // Record entitlements (no immediate payout — contributors withdraw on their own)
-    await recordEntitlements(
-      purchase.id,
-      purchase.targetType,
-      purchase.targetId,
-      purchase.amountUsdc
-    );
+    if (confirmed) {
+      await recordEntitlements(purchase.id, verification);
+    }
 
-    return NextResponse.json({ ok: true, purchaseId });
+    return NextResponse.json({ ok: true, purchaseId, txHash });
   } catch (error) {
     if (error instanceof Error && error.message === "UNAUTHENTICATED") {
       return NextResponse.json({ error: "Unauthenticated" }, { status: 401 });
@@ -95,57 +94,27 @@ export async function POST(req: NextRequest) {
 }
 
 /**
- * Record revenue entitlements for contributors.
- * Revenue events are created with status "pending" (claimable).
- * Contributors withdraw funds themselves via /api/withdrawals.
+ * Mirror the onchain revenue split into revenue_events for earnings history.
+ * Balances themselves live in the contract; contributors claim from there.
  */
-async function recordEntitlements(
-  purchaseId: string,
-  targetType: string,
-  targetId: string,
-  amountUsdc: number
-) {
-  const platformFeeBps = getPlatformFeeBps();
-  const platformFee = Math.floor((amountUsdc * platformFeeBps) / 10000);
-  const distributableAmount = amountUsdc - platformFee;
+async function recordEntitlements(purchaseId: string, verification: VerifiedPurchase) {
+  if (verification.credits.length === 0) return;
 
-  if (targetType === "listing") {
-    const listing = await db.query.dataListings.findFirst({
-      where: eq(dataListings.id, targetId),
-    });
-    if (!listing) return;
+  const wallets = [...new Set(verification.credits.map((c) => getAddress(c.recipient)))];
+  const recipients = await db.query.users.findMany({
+    where: inArray(users.walletAddress, wallets),
+    columns: { id: true, walletAddress: true },
+  });
+  const userIdByWallet = new Map(recipients.map((u) => [u.walletAddress, u.id]));
 
-    await db.insert(revenueEvents).values({
-      purchaseId,
-      recipientUserId: listing.ownerUserId,
-      amountUsdc: distributableAmount,
-      status: "pending",
-    });
-  } else {
-    // Dataset: split equally among active contributors only.
-    // Revoked contributors do not earn from new purchases.
-    const contributions = await db.query.datasetContributions.findMany({
-      where: and(
-        eq(datasetContributions.datasetId, targetId),
-        eq(datasetContributions.status, "active")
-      ),
-    });
+  const rows = verification.credits.flatMap((credit) => {
+    const recipientUserId = userIdByWallet.get(getAddress(credit.recipient));
+    return recipientUserId
+      ? [{ purchaseId, recipientUserId, amountUsdc: Number(credit.amount), status: "pending" as const }]
+      : [];
+  });
 
-    if (contributions.length === 0) {
-      return;
-    }
-
-    const perContributorAmount = Math.floor(
-      distributableAmount / contributions.length
-    );
-
-    for (const contribution of contributions) {
-      await db.insert(revenueEvents).values({
-        purchaseId,
-        recipientUserId: contribution.contributorUserId,
-        amountUsdc: perContributorAmount,
-        status: "pending",
-      });
-    }
+  if (rows.length > 0) {
+    await db.insert(revenueEvents).values(rows);
   }
 }

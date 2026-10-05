@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { LoadingDots } from "@/components/LoadingDots";
 import { formatUsdc, formatDate } from "@/lib/format";
+import { txUrl } from "@/lib/chain";
 
 type Purchase = {
   id: string;
@@ -97,7 +98,7 @@ export default function PurchasesPage() {
               <div className="flex items-center gap-2 shrink-0">
                 {p.txSignature && (
                   <a
-                    href={`https://solscan.io/tx/${p.txSignature}`}
+                    href={txUrl(p.txSignature)}
                     target="_blank"
                     rel="noreferrer"
                     onClick={(e) => e.stopPropagation()}

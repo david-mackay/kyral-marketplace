@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { LoadingDots } from "@/components/LoadingDots";
 import { formatUsdc, formatDate } from "@/lib/format";
+import { txUrl } from "@/lib/chain";
 
 type RevenueEvent = {
   id: string;
@@ -24,7 +25,7 @@ export default function EarningsPage() {
   const [withdrawResult, setWithdrawResult] = useState<{
     ok: boolean;
     message: string;
-    txSignature?: string;
+    txHash?: string;
   } | null>(null);
 
   const loadEarnings = useCallback(async () => {
@@ -61,7 +62,7 @@ export default function EarningsPage() {
       setWithdrawResult({
         ok: true,
         message: `Withdrew ${formatUsdc(data.amountUsdc)} USDC`,
-        txSignature: data.txSignature,
+        txHash: data.txHash ?? undefined,
       });
       // Refresh data
       await loadEarnings();
@@ -101,7 +102,7 @@ export default function EarningsPage() {
           <div className="text-2xl font-bold text-emerald-400">
             {formatUsdc(availableBalance)}
           </div>
-          <div className="text-xs text-zinc-600 mt-1">USDC</div>
+          <div className="text-xs text-zinc-600 mt-1">USDC held for you onchain</div>
         </div>
         <div className="rounded-xl border border-zinc-700/50 bg-zinc-900/50 p-6">
           <div className="text-xs text-zinc-500 mb-1">Total Withdrawn</div>
@@ -128,7 +129,7 @@ export default function EarningsPage() {
                 Withdraw your earnings
               </div>
               <div className="text-xs text-zinc-500 mt-1">
-                {formatUsdc(availableBalance)} USDC will be sent to your connected wallet
+                The Kyral contract sends {formatUsdc(availableBalance)} USDC straight to your wallet. No gas needed.
               </div>
             </div>
             <button
@@ -165,14 +166,14 @@ export default function EarningsPage() {
           }`}
         >
           {withdrawResult.message}
-          {withdrawResult.txSignature && (
+          {withdrawResult.txHash && (
             <a
-              href={`https://solscan.io/tx/${withdrawResult.txSignature}`}
+              href={txUrl(withdrawResult.txHash)}
               target="_blank"
               rel="noreferrer"
               className="ml-2 underline hover:text-emerald-300"
             >
-              View on Solscan
+              View on MonadVision
             </a>
           )}
         </div>
@@ -211,7 +212,7 @@ export default function EarningsPage() {
                     {formatDate(e.createdAt)}
                     {e.txSignature && (
                       <a
-                        href={`https://solscan.io/tx/${e.txSignature}`}
+                        href={txUrl(e.txSignature)}
                         target="_blank"
                         rel="noreferrer"
                         className="ml-2 text-emerald-500/70 hover:text-emerald-400"

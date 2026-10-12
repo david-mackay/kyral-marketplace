@@ -4,9 +4,9 @@ import { addressUrl, txUrl } from "@/lib/chain";
 import { PURPOSE_LABELS, type ConsentPurpose } from "@/lib/data-profile";
 
 /** Dollar amount with de-emphasized cents. Amounts are USDC smallest units. */
-export function Money({ usdc, className = "" }: { usdc: number; className?: string }) {
+export function Money({ usdc, decimals = 2, className = "" }: { usdc: number; decimals?: number; className?: string }) {
   const dollars = usdc / 1_000_000;
-  const [whole, cents] = dollars.toFixed(2).split(".");
+  const [whole, cents] = dollars.toFixed(decimals).split(".");
   return (
     <span className={`tabular-nums ${className}`}>
       ${Number(whole).toLocaleString("en-US")}

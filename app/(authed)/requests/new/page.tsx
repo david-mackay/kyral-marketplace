@@ -8,6 +8,7 @@ import { useConfig } from "wagmi";
 
 import { UsdcFaucetButton } from "@/components/UsdcFaucetButton";
 import { Sheet } from "@/components/ui";
+import { formatRate } from "@/lib/bounties";
 import { USDC_HAS_FAUCET } from "@/lib/chain";
 import { CONSENT_PURPOSES, PURPOSE_LABELS, type ConsentPurpose } from "@/lib/data-profile";
 import { CATEGORY_LABELS, DATA_CATEGORIES, formatUsdc } from "@/lib/format";
@@ -15,6 +16,14 @@ import { fundBounty, type BountyFunding } from "@/lib/purchase";
 import { SIGNALS, detectSignals, type Signal } from "@/lib/signals";
 
 const SIGNAL_GROUPS = [...SIGNALS.reduce((m, s) => m.set(s.category, [...(m.get(s.category) ?? []), s]), new Map<string, Signal[]>())];
+
+const RENTAL_DURATIONS = [
+  { seconds: 3_600, label: "1 hour" },
+  { seconds: 6 * 3_600, label: "6 hours" },
+  { seconds: 86_400, label: "1 day" },
+  { seconds: 3 * 86_400, label: "3 days" },
+  { seconds: 7 * 86_400, label: "1 week" },
+];
 
 const SPAN_OPTIONS = [
   { days: 0, label: "Any" },
@@ -50,6 +59,9 @@ export default function NewRequestPage() {
   const [minSpanDays, setMinSpanDays] = useState(0);
   const [reward, setReward] = useState("10");
   const [maxContributors, setMaxContributors] = useState("25");
+  const [pricing, setPricing] = useState<"fixed" | "rental">("fixed");
+  const [ratePerHour, setRatePerHour] = useState("1");
+  const [durationSeconds, setDurationSeconds] = useState(RENTAL_DURATIONS[1]!.seconds);
 
   const [draft, setDraft] = useState<{ id: string; funding: BountyFunding } | null>(null);
   const [step, setStep] = useState<"idle" | "drafting" | "funding" | "matching">("idle");
@@ -57,7 +69,9 @@ export default function NewRequestPage() {
 
   const rewardCents = Math.round(Number(reward) * 100);
   const max = Math.max(0, Math.floor(Number(maxContributors)));
-  const rewardsTotal = rewardCents * 10_000 * max;
+  const ratePerSecondUsdc = Math.round((Number(ratePerHour) * 1_000_000) / 3_600);
+  const rentals = pricing === "rental";
+  const rewardsTotal = rentals ? ratePerSecondUsdc * durationSeconds * max : rewardCents * 10_000 * max;
   const locked = draft !== null;
 
   const plan = async () => {
@@ -105,7 +119,9 @@ export default function NewRequestPage() {
             minRows,
             minSpanDays,
           },
-          rewardUsdc: rewardCents * 10_000,
+          ...(rentals
+            ? { rental: { ratePerSecondUsdc, durationSeconds } }
+            : { rewardUsdc: rewardCents * 10_000 }),
           maxContributors: max,
         }),
       });
@@ -144,7 +160,7 @@ export default function NewRequestPage() {
   const toggleSignal = (id: string) =>
     setSignals((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : prev.length < 10 ? [...prev, id] : prev));
 
-  const valid = title.trim().length >= 3 && rewardCents >= 10 && max >= 1;
+  const valid = title.trim().length >= 3 && max >= 1 && (rentals ? ratePerSecondUsdc >= 1 : rewardCents >= 10);
 
   return (
     <div className="max-w-3xl mx-auto space-y-6">
@@ -243,26 +259,57 @@ export default function NewRequestPage() {
             </div>
           </div>
 
-          <div className="hairline border-t pt-5 grid sm:grid-cols-2 gap-5">
-            <Field label="Reward per person ($)">
-              <input className="field" type="number" min={0.1} step={0.5} value={reward} onChange={(e) => setReward(e.target.value)} />
-            </Field>
-            <Field label="People needed">
-              <input className="field" type="number" min={1} value={maxContributors} onChange={(e) => setMaxContributors(e.target.value)} />
-            </Field>
+          <div className="hairline border-t pt-5 space-y-5">
+            <div className="flex gap-2">
+              <button type="button" onClick={() => setPricing("fixed")} aria-pressed={!rentals} className="chip-toggle">
+                Fixed reward
+              </button>
+              <button type="button" onClick={() => setPricing("rental")} aria-pressed={rentals} className="chip-toggle">
+                Rent by the second
+              </button>
+            </div>
+            {rentals ? (
+              <div className="grid sm:grid-cols-3 gap-5">
+                <Field label="Rate per person ($ per hour)">
+                  <input className="field" type="number" min={0.01} step={0.25} value={ratePerHour} onChange={(e) => setRatePerHour(e.target.value)} />
+                  <span className="block text-xs text-zinc-500 mt-1.5">{formatRate(ratePerSecondUsdc)}, paid every second</span>
+                </Field>
+                <Field label="Access for">
+                  <select className="field" value={durationSeconds} onChange={(e) => setDurationSeconds(Number(e.target.value))}>
+                    {RENTAL_DURATIONS.map((d) => (
+                      <option key={d.seconds} value={d.seconds}>{d.label}</option>
+                    ))}
+                  </select>
+                </Field>
+                <Field label="People needed">
+                  <input className="field" type="number" min={1} value={maxContributors} onChange={(e) => setMaxContributors(e.target.value)} />
+                </Field>
+              </div>
+            ) : (
+              <div className="grid sm:grid-cols-2 gap-5">
+                <Field label="Reward per person ($)">
+                  <input className="field" type="number" min={0.1} step={0.5} value={reward} onChange={(e) => setReward(e.target.value)} />
+                </Field>
+                <Field label="People needed">
+                  <input className="field" type="number" min={1} value={maxContributors} onChange={(e) => setMaxContributors(e.target.value)} />
+                </Field>
+              </div>
+            )}
           </div>
         </fieldset>
       </Sheet>
 
       <div className="glass-strong p-6 sm:p-8 flex flex-col sm:flex-row sm:items-center justify-between gap-6">
         <div>
-          <div className="eyebrow mb-1">{draft ? "Total to fund" : "Rewards"}</div>
+          <div className="eyebrow mb-1">{draft ? "Total to fund" : rentals ? "Most this can cost" : "Rewards"}</div>
           <div className="num-display text-4xl">
             {formatUsdc(draft ? Number(draft.funding.depositUsdc) : rewardsTotal)}
           </div>
           <div className="text-xs text-zinc-500 mt-1">
             {draft
-              ? `Includes a ${formatUsdc(Number(draft.funding.depositUsdc) - rewardsTotal)} platform fee. Unused slots are refunded.`
+              ? `Includes a ${formatUsdc(Number(draft.funding.depositUsdc) - rewardsTotal)} platform fee. ${
+                  rentals ? "Stop anytime; unused seconds are refunded." : "Unused slots are refunded."
+                }`
               : "Plus a small platform fee, shown before you pay."}
           </div>
         </div>

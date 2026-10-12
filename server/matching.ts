@@ -16,6 +16,8 @@ import {
   type User,
 } from "@/server/db/schema";
 import { fillBountyOnchain } from "@/server/monad/bounties";
+import { joinRentalOnchain } from "@/server/monad/rentals";
+import { formatRate, isRental, rentalEnded } from "@/lib/bounties";
 
 type ShareableDoc = Document & { profile: DataProfile };
 
@@ -24,14 +26,21 @@ function isShareable(doc: Document): doc is ShareableDoc {
 }
 
 function eligible(bounty: Bounty, user: User) {
-  return user.autoFill && bounty.creatorUserId !== user.id && user.consentPurposes.includes(bounty.purpose);
+  return (
+    user.autoFill &&
+    bounty.creatorUserId !== user.id &&
+    user.consentPurposes.includes(bounty.purpose) &&
+    !rentalEnded(bounty)
+  );
 }
 
+/** A fixed reward paid now (`rewardUsdc`), or a rental seat earning `ratePerSecondUsdc`. */
 export interface Payout {
   bountyId: string;
   title: string;
   organization: string | null;
   rewardUsdc: number;
+  ratePerSecondUsdc: number | null;
   txHash: Hex;
 }
 
@@ -53,6 +62,8 @@ async function fill(bounty: Bounty, user: User, doc: ShareableDoc): Promise<Payo
     .returning();
   if (!reserved) return null;
 
+  const rental = isRental(bounty);
+  const paidNowUsdc = rental ? 0 : bounty.rewardUsdc;
   const releaseSlot = () =>
     db
       .update(bounties)
@@ -65,7 +76,7 @@ async function fill(bounty: Bounty, user: User, doc: ShareableDoc): Promise<Payo
       bountyId: bounty.id,
       contributorUserId: user.id,
       documentId: doc.id,
-      rewardUsdc: bounty.rewardUsdc,
+      rewardUsdc: paidNowUsdc,
     })
     .onConflictDoNothing()
     .returning();
@@ -76,7 +87,10 @@ async function fill(bounty: Bounty, user: User, doc: ShareableDoc): Promise<Payo
 
   let txHash: Hex;
   try {
-    txHash = await fillBountyOnchain(bounty.id, user.walletAddress, (doc.deidSha256 as Hex | null) ?? zeroHash);
+    const dataHash = (doc.deidSha256 as Hex | null) ?? zeroHash;
+    txHash = rental
+      ? await joinRentalOnchain(bounty.id, user.walletAddress, dataHash)
+      : await fillBountyOnchain(bounty.id, user.walletAddress, dataHash);
   } catch (error) {
     console.error(`Onchain fill failed for bounty ${bounty.id}`, error);
     await db.delete(bountyFills).where(eq(bountyFills.id, row.id));
@@ -90,13 +104,16 @@ async function fill(bounty: Bounty, user: User, doc: ShareableDoc): Promise<Payo
   }
 
   const who = bounty.organization ?? "A research team";
+  const rate = bounty.ratePerSecondUsdc ?? 0;
   await recordActivity(
     {
       userId: user.id,
       kind: "bounty_filled",
-      title: `Your ${doc.profile.documentType.toLowerCase()} joined "${bounty.title}"`,
-      detail: `${who} · ${bounty.purpose} research`,
-      amountUsdc: bounty.rewardUsdc,
+      title: rental
+        ? `${who} is renting your ${doc.profile.documentType.toLowerCase()}`
+        : `Your ${doc.profile.documentType.toLowerCase()} joined "${bounty.title}"`,
+      detail: rental ? `Earning ${formatRate(rate)} until the rental ends` : `${who} · ${bounty.purpose} research`,
+      amountUsdc: rental ? null : paidNowUsdc,
       href: `/requests/${bounty.id}`,
       txHash,
     },
@@ -104,12 +121,21 @@ async function fill(bounty: Bounty, user: User, doc: ShareableDoc): Promise<Payo
       userId: bounty.creatorUserId,
       kind: "bounty_delivery",
       title: `New contributor for "${bounty.title}"`,
-      detail: `${reserved.filledCount} of ${reserved.maxContributors} filled · ${formatUsdc(bounty.rewardUsdc)} paid from escrow`,
+      detail: rental
+        ? `${reserved.filledCount} of ${reserved.maxContributors} seats · now paying ${formatRate(rate)} from escrow`
+        : `${reserved.filledCount} of ${reserved.maxContributors} filled · ${formatUsdc(paidNowUsdc)} paid from escrow`,
       href: `/requests/${bounty.id}`,
       txHash,
     }
   );
-  return { bountyId: bounty.id, title: bounty.title, organization: bounty.organization, rewardUsdc: bounty.rewardUsdc, txHash };
+  return {
+    bountyId: bounty.id,
+    title: bounty.title,
+    organization: bounty.organization,
+    rewardUsdc: paidNowUsdc,
+    ratePerSecondUsdc: bounty.ratePerSecondUsdc,
+    txHash,
+  };
 }
 
 async function shareableDocsFor(userId: string) {

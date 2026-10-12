@@ -21,6 +21,9 @@ export const monadChain = defineChain({
 export const MARKETPLACE_ADDRESS = (process.env
   .NEXT_PUBLIC_MARKETPLACE_ADDRESS ?? "0x") as Address;
 
+export const RENTALS_ADDRESS = (process.env.NEXT_PUBLIC_RENTALS_ADDRESS ??
+  "0x") as Address;
+
 export const USDC_ADDRESS = (process.env.NEXT_PUBLIC_USDC_ADDRESS ??
   "0x") as Address;
 

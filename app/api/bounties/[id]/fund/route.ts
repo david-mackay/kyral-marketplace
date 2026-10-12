@@ -10,6 +10,8 @@ import { db } from "@/server/db";
 import { bounties } from "@/server/db/schema";
 import { fillRequestFromPool } from "@/server/matching";
 import { verifyBountyFunding } from "@/server/monad/bounties";
+import { verifyRentalFunding } from "@/server/monad/rentals";
+import { formatRate } from "@/lib/bounties";
 
 export const runtime = "nodejs";
 export const maxDuration = 120;
@@ -31,20 +33,32 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       return NextResponse.json({ ok: true, bounty });
     }
 
-    const funded = await verifyBountyFunding({
-      txHash: txHash as Hex,
-      bountyId: bounty.id,
-      funder: user.walletAddress,
-      rewardUsdc: bounty.rewardUsdc,
-      maxContributors: bounty.maxContributors,
-    });
+    const rental = bounty.ratePerSecondUsdc != null;
+    const rentalEndsAt = rental
+      ? await verifyRentalFunding({
+          txHash: txHash as Hex,
+          bountyId: bounty.id,
+          funder: user.walletAddress,
+          ratePerSecondUsdc: bounty.ratePerSecondUsdc!,
+          maxContributors: bounty.maxContributors,
+        })
+      : null;
+    const funded = rental
+      ? !!rentalEndsAt
+      : await verifyBountyFunding({
+          txHash: txHash as Hex,
+          bountyId: bounty.id,
+          funder: user.walletAddress,
+          rewardUsdc: bounty.rewardUsdc,
+          maxContributors: bounty.maxContributors,
+        });
     if (!funded) {
       return NextResponse.json({ error: "Could not verify the deposit" }, { status: 400 });
     }
 
     const [opened] = await db
       .update(bounties)
-      .set({ status: "open", fundingTxHash: txHash })
+      .set({ status: "open", fundingTxHash: txHash, rentalEndsAt })
       .where(and(eq(bounties.id, id), eq(bounties.status, "awaiting_funding")))
       .returning();
 
@@ -53,7 +67,9 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
         userId: user.id,
         kind: "bounty_funded",
         title: `"${bounty.title}" is live`,
-        detail: `${formatUsdc(bounty.rewardUsdc * bounty.maxContributors)} in rewards held in escrow`,
+        detail: rental
+          ? `Renting at ${formatRate(bounty.ratePerSecondUsdc!)} per person, ${formatUsdc(bounty.rewardUsdc * bounty.maxContributors)} held in escrow`
+          : `${formatUsdc(bounty.rewardUsdc * bounty.maxContributors)} in rewards held in escrow`,
         href: `/requests/${bounty.id}`,
         txHash,
       });

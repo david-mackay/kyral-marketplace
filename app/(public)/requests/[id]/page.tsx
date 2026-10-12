@@ -7,7 +7,15 @@ import { useCallback, useEffect, useState } from "react";
 import { Money, ProgressBar, PurposeChip, Sheet, SkeletonRows, VerifyLink, formatSpan, timeAgo } from "@/components/ui";
 import { PURPOSE_LABELS } from "@/lib/data-profile";
 import { formatUsdc } from "@/lib/format";
-import { criteriaChips, type BountyRow } from "@/lib/bounties";
+import {
+  criteriaChips,
+  formatCountdown,
+  formatDuration,
+  formatRate,
+  isRental,
+  rentalEnded,
+  type BountyRow,
+} from "@/lib/bounties";
 
 interface Contribution {
   label: string;
@@ -39,6 +47,12 @@ export default function RequestDetailPage() {
   const [missing, setMissing] = useState(false);
   const [closing, setClosing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [now, setNow] = useState(() => Date.now());
+
+  useEffect(() => {
+    const tick = setInterval(() => setNow(Date.now()), 1_000);
+    return () => clearInterval(tick);
+  }, []);
 
   const load = useCallback(async () => {
     const res = await fetch(`/api/bounties/${id}`, { cache: "no-store" });
@@ -79,6 +93,8 @@ export default function RequestDetailPage() {
 
   const { bounty: b, isCreator, contributions, myFill } = detail;
   const remaining = b.maxContributors - b.filledCount;
+  const rental = isRental(b);
+  const ended = rentalEnded(b, now) && b.rentalEndsAt != null;
 
   return (
     <div className="space-y-6">
@@ -111,9 +127,12 @@ export default function RequestDetailPage() {
             <Sheet
               title={`Contributions (${contributions.length})`}
               action={
-                contributions.length > 0 && (
+                contributions.length > 0 &&
+                (rental && ended ? (
+                  <span className="text-xs text-zinc-500">Access ended</span>
+                ) : (
                   <a href={`/api/bounties/${id}/download`} className="btn-ghost btn-sm">Download all</a>
-                )
+                ))
               }
             >
               {contributions.length === 0 ? (
@@ -145,10 +164,24 @@ export default function RequestDetailPage() {
         </div>
 
         <aside className="glass p-6 sm:p-7 lg:sticky lg:top-24 space-y-5">
-          <div>
-            <div className="eyebrow mb-2">Reward per person</div>
-            <Money usdc={b.rewardUsdc} className="num-display text-5xl" />
-          </div>
+          {rental ? (
+            <div>
+              <div className="eyebrow mb-2">Rent per person</div>
+              <div className="num-display text-5xl">{formatRate(b.ratePerSecondUsdc!)}</div>
+              <div className="text-xs text-zinc-500 mt-2 tabular-nums">
+                {b.rentalEndsAt
+                  ? ended
+                    ? "Access window ended"
+                    : `Access ends in ${formatCountdown(new Date(b.rentalEndsAt).getTime() - now)}`
+                  : `Runs for ${formatDuration(b.rentalDurationSeconds ?? 0)} once funded`}
+              </div>
+            </div>
+          ) : (
+            <div>
+              <div className="eyebrow mb-2">Reward per person</div>
+              <Money usdc={b.rewardUsdc} className="num-display text-5xl" />
+            </div>
+          )}
 
           <div>
             <ProgressBar value={b.filledCount} max={b.maxContributors} />
@@ -166,14 +199,18 @@ export default function RequestDetailPage() {
             <div className="hairline border-t pt-4">
               <div className="text-sm text-emerald-300">Your data is in this study</div>
               <div className="text-xs text-zinc-500 mt-1 flex items-center gap-2">
-                You earned {formatUsdc(myFill.rewardUsdc)} · {timeAgo(myFill.createdAt)}
+                {rental
+                  ? `${ended ? "You earned" : "Earning"} ${formatRate(b.ratePerSecondUsdc!)} since ${timeAgo(myFill.createdAt)}`
+                  : `You earned ${formatUsdc(myFill.rewardUsdc)} · ${timeAgo(myFill.createdAt)}`}
                 <VerifyLink txHash={myFill.txHash} />
               </div>
             </div>
           ) : !isCreator && b.status === "open" ? (
             <div className="hairline border-t pt-4 space-y-3">
               <p className="text-xs text-zinc-500">
-                Have matching data? Add it and you&apos;ll be paid {formatUsdc(b.rewardUsdc)} automatically if it qualifies.
+                {rental
+                  ? `Have matching data? Add it and you'll earn ${formatRate(b.ratePerSecondUsdc!)} for as long as the researcher has access.`
+                  : `Have matching data? Add it and you'll be paid ${formatUsdc(b.rewardUsdc)} automatically if it qualifies.`}
               </p>
               <Link href="/upload" className="btn-liquid w-full">Add my data</Link>
             </div>
@@ -181,13 +218,26 @@ export default function RequestDetailPage() {
 
           {isCreator && (
             <div className="hairline border-t pt-4 space-y-3 text-xs text-zinc-500">
-              {b.status === "open" && (
+              {rental && (b.status === "open" || b.status === "filled") ? (
                 <>
-                  <div>{formatUsdc(remaining * b.rewardUsdc)} still held for {remaining} more contributor{remaining === 1 ? "" : "s"}.</div>
+                  <div>
+                    {ended
+                      ? "The access window is over. Settle to get back any unused deposit."
+                      : `You're paying ${formatRate(b.filledCount * b.ratePerSecondUsdc!)} for ${b.filledCount} contributor${b.filledCount === 1 ? "" : "s"}. Stop anytime and unused time is refunded.`}
+                  </div>
                   <button onClick={() => void close()} disabled={closing} className="btn-ghost w-full">
-                    {closing ? "Closing…" : "Close & refund the rest"}
+                    {closing ? "Settling…" : ended ? "Settle & refund" : "Stop rental & refund"}
                   </button>
                 </>
+              ) : (
+                b.status === "open" && (
+                  <>
+                    <div>{formatUsdc(remaining * b.rewardUsdc)} still held for {remaining} more contributor{remaining === 1 ? "" : "s"}.</div>
+                    <button onClick={() => void close()} disabled={closing} className="btn-ghost w-full">
+                      {closing ? "Closing…" : "Close & refund the rest"}
+                    </button>
+                  </>
+                )
               )}
               {b.status === "awaiting_funding" && (
                 <button onClick={() => void close()} disabled={closing} className="btn-ghost w-full">Discard draft</button>
@@ -199,7 +249,9 @@ export default function RequestDetailPage() {
           {b.fundingTxHash && (
             <div className="hairline border-t pt-4 flex items-center justify-between text-[11px] text-zinc-500">
               <span>
-                {b.status === "open" ? (
+                {rental ? (
+                  ended ? "Rental settled onchain" : `Streaming from escrow to ${b.filledCount} contributor${b.filledCount === 1 ? "" : "s"}`
+                ) : b.status === "open" ? (
                   <>
                     <Money usdc={remaining * b.rewardUsdc} className="text-zinc-300" /> left in escrow ·{" "}
                     <Money usdc={b.filledCount * b.rewardUsdc} className="text-emerald-300" /> paid out

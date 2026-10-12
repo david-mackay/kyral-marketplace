@@ -30,6 +30,13 @@ Crypto stays in the background: amounts are shown in dollars, sign-in works with
 - **Access receipts.** `hasAccess(itemId, buyer)` records every purchase onchain, linked to the offchain order by `purchaseRef`.
 - **Escrowed data requests.** `createBounty` / `createBountyWithPermit` lock `maxFills × (reward + fee)`. `fillBounty` (operator) credits the contributor the full reward, records the de-identified data hash in `BountyFilled`, and grants the funder access. One fill per contributor. `closeBounty` refunds unfilled slots to the funder.
 
+`contracts/src/KyralRentals.sol` rents data by the second:
+
+- **Streaming escrow.** `createRental` / `createRentalWithPermit` lock `seats × duration × (rate + fee)`. Each seated contributor (`joinRental`, operator) earns `rate` USDC per second from the block they join until the rental ends.
+- **Stop anytime.** `stopRental` ends accrual and access immediately. `settleRental` refunds every unearned second to the renter and sends the fee on time actually used. A fuzz test checks that renter refund + contributor earnings + fee always equal the deposit.
+- **Access window.** `hasAccess(rentalId)` is true only while the rental runs. Downloads of rented data are refused once it ends.
+- **Same relayed payouts.** `claimFor(rentalIds, account)` sends a contributor's streamed earnings to their own wallet. A single withdrawal in the app claims sales, rewards, and rentals.
+
 The server holds an operator key that registers catalog changes and pays relay gas. It never holds user funds.
 
 Deployed on Monad Testnet, with source verified on MonadVision:
@@ -37,6 +44,7 @@ Deployed on Monad Testnet, with source verified on MonadVision:
 | Contract | Address |
 | --- | --- |
 | `KyralMarketplace` | [`0x2f493719da7c65602ab094A627Dc9574fa4Ce1B1`](https://testnet.monadvision.com/address/0x2f493719da7c65602ab094A627Dc9574fa4Ce1B1) |
+| `KyralRentals` | [`0x6443236BDB1b67001c2ff356aF71bF6be955B8fe`](https://testnet.monadvision.com/address/0x6443236BDB1b67001c2ff356aF71bF6be955B8fe) |
 | `TestUSDC` | [`0x6A3BDf3907B65EF6DFd102fD32C910aC555cd79e`](https://testnet.monadvision.com/address/0x6A3BDf3907B65EF6DFd102fD32C910aC555cd79e) |
 
 ## Built during Metropolis (Sep 1 – Oct 13)
@@ -50,6 +58,7 @@ The original app ran on Solana with an escrow wallet and an offchain ledger. For
 - Added single-signature checkout via EIP-2612 permit, with an approve fallback for smart accounts.
 - Added a testnet USDC faucet in the UI.
 - Added escrowed data requests (bounties) with consent-scoped auto-matching.
+- Added `KyralRentals`: requests can rent data by the second, with balances that tick up live on the Earn page.
 - Added the intake agent: file understanding, de-identification, pricing, and auto-listing.
 - Redesigned the app around patients (big earnings, activity feed, consent) and researchers (requests), with dollars instead of tokens.
 
@@ -73,9 +82,9 @@ npm run seed:demo -- --wallet 0xYourAddress   # also give your own account data 
 npm run dev
 ```
 
-The seed runs the real pipeline: it escrows seven requests from the operator wallet (topping up from the TestUSDC faucet), then uploads sample files for four personas, which get de-identified, listed, and matched onchain.
+The seed runs the real pipeline: it escrows seven requests and one four-day sleep-data rental from the operator wallet (topping up from the TestUSDC faucet), then uploads sample files for four personas, which get de-identified, listed, and matched onchain.
 
-For a live demo, upload the files in `sample-data/demo-uploads/`. They're full of fake identifiers (name, birth date, MRN, phone, email, address, clinicians, and hospitals in the notes) and mixed date formats. The migraine diary fills the migraine request; the lab export fills the thyroid and HbA1c requests.
+For a live demo, upload the files in `sample-data/demo-uploads/`. They're full of fake identifiers (name, birth date, MRN, phone, email, address, clinicians, and hospitals in the notes) and mixed date formats. The migraine diary fills the migraine request and takes a seat in the sleep rental; the lab export fills the thyroid and HbA1c requests.
 
 Set `OPERATOR_PRIVATE_KEY` to the operator address used at deploy time (the deployer by default), and fund it with testnet MON.
 

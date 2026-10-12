@@ -5,11 +5,18 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import { Money, PurposeChip, Sheet, SkeletonRows, VerifyLink, formatSpan, timeAgo } from "@/components/ui";
 import { CONSENT_PURPOSES, PURPOSE_LABELS, type ConsentPurpose, type DataProfile } from "@/lib/data-profile";
+import { formatRate, rentalEnded } from "@/lib/bounties";
 import { formatUsdc } from "@/lib/format";
+
+interface Stream {
+  ratePerSecondUsdc: number;
+  endsAt: number;
+}
 
 interface EarnData {
   availableUsdc: number;
   lifetimeUsdc: number;
+  streams: Stream[];
   settings: { consentPurposes: ConsentPurpose[]; autoFill: boolean };
   data: {
     id: string;
@@ -27,6 +34,8 @@ interface EarnData {
     organization: string | null;
     purpose: string;
     rewardUsdc: number;
+    ratePerSecondUsdc: number | null;
+    rentalEndsAt: string | null;
     txHash: string | null;
     createdAt: string;
   }[];
@@ -137,7 +146,7 @@ export default function EarnPage() {
       <section className="pt-4 pb-2">
         <div className="eyebrow mb-4">Available to withdraw</div>
         <div className="flex flex-col sm:flex-row sm:items-end gap-6 sm:gap-10">
-          <LiveBalance usdc={data.availableUsdc} />
+          <LiveBalance usdc={data.availableUsdc} streams={data.streams} />
           <div className="pb-2">
             <button onClick={() => void withdraw()} disabled={withdrawing || data.availableUsdc === 0} className="btn-liquid">
               {withdrawing ? "Sending…" : "Withdraw"}
@@ -281,7 +290,16 @@ export default function EarnPage() {
                     <VerifyLink txHash={p.txHash} />
                   </div>
                 </div>
-                <Money usdc={p.rewardUsdc} className="text-sm text-emerald-300" />
+                {p.ratePerSecondUsdc != null ? (
+                  <div className="text-right">
+                    <div className="text-sm text-emerald-300 tabular-nums">{formatRate(p.ratePerSecondUsdc)}</div>
+                    <div className="text-[11px] text-zinc-500">
+                      {rentalEnded(p) ? "rental ended" : "streaming now"}
+                    </div>
+                  </div>
+                ) : (
+                  <Money usdc={p.rewardUsdc} className="text-sm text-emerald-300" />
+                )}
               </li>
             ))}
           </ul>
@@ -292,27 +310,41 @@ export default function EarnPage() {
 }
 
 const COUNT_UP_MS = 1_200;
+const ONE_CENT = 10_000;
 
-/** The balance counts up to each new value and briefly shows what just arrived. */
-function LiveBalance({ usdc }: { usdc: number }) {
+/**
+ * The balance counts up to each new value and briefly shows what just arrived.
+ * While rentals are streaming it keeps ticking every frame between polls.
+ */
+function LiveBalance({ usdc, streams }: { usdc: number; streams: Stream[] }) {
   const [shown, setShown] = useState(usdc);
   const [gain, setGain] = useState<number | null>(null);
-  const previous = useRef(usdc);
+  const current = useRef(usdc);
+  const streamKey = JSON.stringify(streams);
+  const streaming = streams.length > 0;
 
   useEffect(() => {
-    const from = previous.current;
-    previous.current = usdc;
-    if (usdc === from) return;
+    const active: Stream[] = JSON.parse(streamKey);
+    const from = current.current;
+    const since = Date.now();
+    const target = () => {
+      const t = Date.now();
+      return usdc + active.reduce((s, x) => s + (x.ratePerSecondUsdc * Math.max(0, Math.min(t, x.endsAt) - since)) / 1_000, 0);
+    };
+    if (usdc === from && active.length === 0) return;
 
     let frame = 0;
     let first = true;
     const start = performance.now();
     const tick = (now: number) => {
       const t = Math.min(1, (now - start) / COUNT_UP_MS);
-      if (first) setGain(usdc > from ? usdc - from : null);
+      const to = target();
+      if (first) setGain(to - from >= ONE_CENT ? to - from : null);
       first = false;
-      setShown(Math.round(from + (usdc - from) * (1 - (1 - t) ** 3)));
-      if (t < 1) frame = requestAnimationFrame(tick);
+      const value = from + (to - from) * (1 - (1 - t) ** 3);
+      current.current = value;
+      setShown(value);
+      if (t < 1 || active.some((x) => x.endsAt > Date.now())) frame = requestAnimationFrame(tick);
     };
     frame = requestAnimationFrame(tick);
     const hide = setTimeout(() => setGain(null), 6_000);
@@ -320,18 +352,22 @@ function LiveBalance({ usdc }: { usdc: number }) {
       cancelAnimationFrame(frame);
       clearTimeout(hide);
     };
-  }, [usdc]);
+  }, [usdc, streamKey]);
+
+  const ratePerSecond = streams.reduce((s, x) => s + x.ratePerSecondUsdc, 0);
 
   return (
     <div>
       <div className={`num-display text-7xl sm:text-8xl lg:text-9xl transition-colors duration-700 ${gain ? "text-emerald-300" : ""}`}>
-        <Money usdc={shown} />
+        <Money usdc={shown} decimals={streaming ? 5 : 2} />
       </div>
       <div className="h-5 mt-1 text-sm text-emerald-300" aria-live="polite">
-        {gain && (
+        {gain ? (
           <>
             +<Money usdc={gain} /> just now
           </>
+        ) : (
+          streaming && `Earning ${formatRate(ratePerSecond)} from ${streams.length} rental${streams.length > 1 ? "s" : ""}`
         )}
       </div>
     </div>

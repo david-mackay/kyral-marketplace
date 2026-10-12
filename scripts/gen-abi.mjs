@@ -3,6 +3,7 @@ import { readFileSync, writeFileSync } from "node:fs";
 const contracts = [
   { name: "KyralMarketplace", exportName: "kyralMarketplaceAbi", file: "kyral-marketplace" },
   { name: "TestUSDC", exportName: "testUsdcAbi", file: "test-usdc" },
+  { name: "KyralRentals", exportName: "kyralRentalsAbi", file: "kyral-rentals" },
 ];
 
 for (const { name, exportName, file } of contracts) {

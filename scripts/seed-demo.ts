@@ -16,13 +16,15 @@ import { privateKeyToAccount } from "viem/accounts";
 
 import { testUsdcAbi } from "@/lib/abi/test-usdc";
 import { kyralMarketplaceAbi } from "@/lib/abi/kyral-marketplace";
-import { bountyIdFor, MARKETPLACE_ADDRESS, USDC_ADDRESS, USDC_HAS_FAUCET } from "@/lib/chain";
+import { kyralRentalsAbi } from "@/lib/abi/kyral-rentals";
+import { bountyIdFor, MARKETPLACE_ADDRESS, RENTALS_ADDRESS, USDC_ADDRESS, USDC_HAS_FAUCET } from "@/lib/chain";
 import type { BountyCriteria, ConsentPurpose } from "@/lib/data-profile";
 import { db } from "@/server/db";
 import { bounties, documents, users, type User } from "@/server/db/schema";
 import { processUpload } from "@/server/intake/process";
 import { fillRequestFromPool } from "@/server/matching";
 import { getOperatorClient, getPublicClient } from "@/server/monad/config";
+import { quoteRentalDeposit, verifyRentalFunding } from "@/server/monad/rentals";
 import { sha256Hex } from "@/server/monad/provenance";
 import { getBucketName, putObject } from "@/server/storage/s3";
 
@@ -206,6 +208,79 @@ async function seedRequests(researcher: User) {
   }
 }
 
+/** Seats stream per second from escrow to every matching contributor. */
+const RENTAL = {
+  title: "Live sleep data, rented by the second",
+  organization: "Circadian Health Lab",
+  description:
+    "Rolling access to daily sleep logs for a circadian-rhythm model. Contributors are paid every second our team has access, and payments stop the moment the rental ends.",
+  purpose: "academic" as ConsentPurpose,
+  criteria: { categories: [], requiredSignals: ["sleep"], minRows: 14, minSpanDays: 14 },
+  ratePerSecondUsdc: 100, // $0.0001/sec, $0.36/hour per contributor
+  durationSeconds: 4 * 86_400,
+  maxContributors: 8,
+};
+
+async function seedRental(researcher: User) {
+  const existing = await db.query.bounties.findFirst({
+    where: and(eq(bounties.creatorUserId, researcher.id), eq(bounties.title, RENTAL.title)),
+  });
+  if (existing && existing.status !== "awaiting_funding") {
+    console.log("  Rental already funded.");
+    return;
+  }
+  const operator = getOperatorClient();
+  const pub = getPublicClient();
+  const row =
+    existing ??
+    (
+      await db
+        .insert(bounties)
+        .values({
+          creatorUserId: researcher.id,
+          title: RENTAL.title,
+          organization: RENTAL.organization,
+          description: RENTAL.description,
+          purpose: RENTAL.purpose,
+          criteria: RENTAL.criteria,
+          rewardUsdc: RENTAL.ratePerSecondUsdc * RENTAL.durationSeconds,
+          ratePerSecondUsdc: RENTAL.ratePerSecondUsdc,
+          rentalDurationSeconds: RENTAL.durationSeconds,
+          maxContributors: RENTAL.maxContributors,
+          status: "awaiting_funding",
+        })
+        .returning()
+    )[0]!;
+
+  const { total } = await quoteRentalDeposit(RENTAL.ratePerSecondUsdc, RENTAL.durationSeconds, RENTAL.maxContributors);
+  await ensureOperatorFunds(total);
+  const approveHash = await operator.writeContract({
+    address: USDC_ADDRESS,
+    abi: erc20Abi,
+    functionName: "approve",
+    args: [RENTALS_ADDRESS, total],
+  });
+  await pub.waitForTransactionReceipt({ hash: approveHash });
+
+  const hash = await operator.writeContract({
+    address: RENTALS_ADDRESS,
+    abi: kyralRentalsAbi,
+    functionName: "createRental",
+    args: [bountyIdFor(row.id), BigInt(RENTAL.ratePerSecondUsdc), BigInt(RENTAL.durationSeconds), RENTAL.maxContributors],
+  });
+  const endsAt = await verifyRentalFunding({
+    txHash: hash,
+    bountyId: row.id,
+    funder: operator.account.address,
+    ratePerSecondUsdc: RENTAL.ratePerSecondUsdc,
+    maxContributors: RENTAL.maxContributors,
+  });
+  if (!endsAt) throw new Error(`Rental funding failed for ${row.id}`);
+  await db.update(bounties).set({ status: "open", fundingTxHash: hash, rentalEndsAt: endsAt }).where(eq(bounties.id, row.id));
+  const filled = await fillRequestFromPool(row.id);
+  console.log(`  Funded rental ${row.id} ($${Number(total) / USDC}) · ${filled} seated from existing data`);
+}
+
 async function uploadSample(user: User, fileName: string) {
   const already = await db.query.documents.findFirst({
     where: and(eq(documents.ownerUserId, user.id), eq(documents.originalFileName, fileName)),
@@ -245,6 +320,7 @@ async function main() {
     autoFill: false,
   });
   await seedRequests(researcher);
+  await seedRental(researcher);
 
   const people = PERSONAS.map((p) => ({ ...p, wallet: demoWallet(p.name) }));
   if (ownWallet) {

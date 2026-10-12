@@ -3,8 +3,10 @@ import { eq, and, desc, gte, sql } from "drizzle-orm";
 
 import { requireAuthenticatedUser } from "@/server/auth/session";
 import { db } from "@/server/db";
-import { activityEvents, revenueEvents } from "@/server/db/schema";
+import { activityEvents, bountyFills, revenueEvents } from "@/server/db/schema";
 import { readClaimable, relayClaim } from "@/server/monad/marketplace";
+import { relayRentalClaim } from "@/server/monad/rentals";
+import { isRental } from "@/lib/bounties";
 import { formatUsdc } from "@/lib/format";
 
 export const runtime = "nodejs";
@@ -104,7 +106,15 @@ export async function POST() {
 
     let claimed: Awaited<ReturnType<typeof relayClaim>>;
     try {
-      claimed = await relayClaim(user.walletAddress);
+      const rentalFills = await db.query.bountyFills.findMany({
+        where: eq(bountyFills.contributorUserId, user.id),
+        with: { bounty: true },
+      });
+      const rentalIds = rentalFills.filter((f) => isRental(f.bounty)).map((f) => f.bountyId);
+      // Sequential: both are operator transactions and would race for a nonce.
+      const sales = await relayClaim(user.walletAddress);
+      const rentals = await relayRentalClaim(rentalIds, user.walletAddress);
+      claimed = { amount: sales.amount + rentals.amount, txHash: sales.txHash ?? rentals.txHash };
     } catch (error) {
       await releaseSlot();
       console.error("Withdrawal claim failed", error);

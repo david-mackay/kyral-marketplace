@@ -4,6 +4,7 @@ import { and, eq } from "drizzle-orm";
 import { requireAuthenticatedUser } from "@/server/auth/session";
 import { db } from "@/server/db";
 import { bounties, bountyFills } from "@/server/db/schema";
+import { rentalEnded } from "@/lib/bounties";
 import { deliverableFile, zipResponse, type DeliverableFile } from "@/server/delivery";
 
 export const runtime = "nodejs";
@@ -18,6 +19,9 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
       where: and(eq(bounties.id, id), eq(bounties.creatorUserId, user.id)),
     });
     if (!bounty) return NextResponse.json({ error: "Not found" }, { status: 404 });
+    if (rentalEnded(bounty)) {
+      return NextResponse.json({ error: "This rental has ended, so its data is no longer available." }, { status: 403 });
+    }
 
     const fills = await db.query.bountyFills.findMany({
       where: eq(bountyFills.bountyId, id),

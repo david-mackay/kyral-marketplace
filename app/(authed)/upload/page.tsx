@@ -4,9 +4,17 @@ import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { Money, VerifyLink, formatSpan } from "@/components/ui";
+import { formatRate } from "@/lib/bounties";
 import type { DataProfile } from "@/lib/data-profile";
 
-type Payout = { bountyId: string; title: string; organization: string | null; rewardUsdc: number; txHash: string };
+type Payout = {
+  bountyId: string;
+  title: string;
+  organization: string | null;
+  rewardUsdc: number;
+  ratePerSecondUsdc: number | null;
+  txHash: string;
+};
 
 const STEPS = ["Reading your file", "Removing anything that identifies you", "Pricing it", "Matching it to studies"];
 
@@ -86,6 +94,7 @@ export default function UploadPage() {
   const totalValue = done.reduce((s, i) => s + (i.listingPriceUsdc ?? 0), 0);
   const payouts = done.flatMap((i) => i.payouts ?? []);
   const totalEarned = payouts.reduce((s, p) => s + p.rewardUsdc, 0);
+  const streamRate = payouts.reduce((s, p) => s + (p.ratePerSecondUsdc ?? 0), 0);
 
   return (
     <div className="max-w-3xl mx-auto space-y-8">
@@ -150,8 +159,15 @@ export default function UploadPage() {
                 <Money usdc={totalEarned} />
               </div>
               <div className="mt-2 text-sm text-zinc-400">
-                Paid from research escrow by {payouts.length} {payouts.length === 1 ? "study" : "studies"}, ready to withdraw
+                Paid from research escrow, ready to withdraw
               </div>
+            </div>
+          )}
+          {streamRate > 0 && (
+            <div>
+              <div className="eyebrow mb-2">Now earning</div>
+              <div className="num-display text-5xl text-emerald-300">{formatRate(streamRate)}</div>
+              <div className="mt-2 text-sm text-zinc-400">Paid every second while researchers rent your data</div>
             </div>
           )}
           {totalValue > 0 && (
@@ -219,8 +235,8 @@ function UploadRow({ item }: { item: Item }) {
               </span>
               <span className="flex items-center gap-2 shrink-0">
                 <VerifyLink txHash={p.txHash} />
-                <span className="text-emerald-300">
-                  +<Money usdc={p.rewardUsdc} />
+                <span className="text-emerald-300 tabular-nums">
+                  {p.ratePerSecondUsdc ? `${formatRate(p.ratePerSecondUsdc)} while rented` : <>+<Money usdc={p.rewardUsdc} /></>}
                 </span>
               </span>
             </li>

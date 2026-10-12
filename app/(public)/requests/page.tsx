@@ -5,7 +5,7 @@ import { useEffect, useState } from "react";
 
 import { Money, ProgressBar, PurposeChip, SkeletonRows, timeAgo } from "@/components/ui";
 import { useWalletAuth } from "@/hooks/useWalletAuth";
-import { criteriaChips, type BountyRow } from "@/lib/bounties";
+import { criteriaChips, formatDuration, formatRate, isRental, type BountyRow } from "@/lib/bounties";
 
 export default function RequestsPage() {
   const { isAuthenticated } = useWalletAuth();
@@ -89,8 +89,19 @@ function RequestList({ rows, muted = false }: { rows: BountyRow[]; muted?: boole
               </div>
             </div>
             <div className="sm:w-44 shrink-0 sm:text-right">
-              <Money usdc={b.rewardUsdc} className="text-2xl font-light text-zinc-50" />
-              <div className="text-[11px] text-zinc-500 mb-2">per person</div>
+              {isRental(b) ? (
+                <>
+                  <div className="text-2xl font-light text-zinc-50 tabular-nums">{formatRate(b.ratePerSecondUsdc!)}</div>
+                  <div className="text-[11px] text-zinc-500 mb-2">
+                    per person · {b.rentalEndsAt ? `until ${new Date(b.rentalEndsAt).toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric" })}` : formatDuration(b.rentalDurationSeconds ?? 0)}
+                  </div>
+                </>
+              ) : (
+                <>
+                  <Money usdc={b.rewardUsdc} className="text-2xl font-light text-zinc-50" />
+                  <div className="text-[11px] text-zinc-500 mb-2">per person</div>
+                </>
+              )}
               <ProgressBar value={b.filledCount} max={b.maxContributors} />
               <div className="text-[11px] text-zinc-500 mt-1.5 tabular-nums">
                 {b.filledCount} of {b.maxContributors} filled

@@ -14,6 +14,8 @@ import {
 } from "@/server/db/schema";
 import { matchesCriteria } from "@/server/criteria";
 import { readClaimable } from "@/server/monad/marketplace";
+import { readRentalClaimable, readRentalEarned } from "@/server/monad/rentals";
+import { isRental, rentalEnded } from "@/lib/bounties";
 
 export const runtime = "nodejs";
 
@@ -42,9 +44,18 @@ export async function GET() {
       }),
     ]);
 
+    const rentalFills = fills.filter((f) => isRental(f.bounty));
+    const rentalIds = rentalFills.map((f) => f.bountyId);
+    const [rentalClaimable, rentalEarned] = await Promise.all([
+      readRentalClaimable(rentalIds, user.walletAddress).catch(() => 0n),
+      readRentalEarned(rentalIds, user.walletAddress).catch(() => 0n),
+    ]);
+    const asOf = Date.now();
+
     const lifetimeUsdc =
       sales.reduce((sum, e) => sum + e.amountUsdc, 0) +
-      fills.reduce((sum, f) => sum + f.rewardUsdc, 0);
+      fills.reduce((sum, f) => sum + f.rewardUsdc, 0) +
+      Number(rentalEarned);
 
     const filledBountyIds = new Set(fills.map((f) => f.bountyId));
     const profiles = docs.filter((d) => d.profile && d.deidObjectKey).map((d) => d.profile as DataProfile);
@@ -53,13 +64,19 @@ export async function GET() {
     const lockedByConsent = openBounties.filter(
       (b) =>
         !filledBountyIds.has(b.id) &&
+        !rentalEnded(b) &&
         !user.consentPurposes.includes(b.purpose) &&
         profiles.some((p) => matchesCriteria(b.criteria, p))
     );
 
     return NextResponse.json({
-      availableUsdc: Number(claimable),
+      availableUsdc: Number(claimable + rentalClaimable),
       lifetimeUsdc,
+      // Rentals still paying out, so the balance can tick up between refreshes.
+      asOf,
+      streams: rentalFills
+        .filter((f) => !rentalEnded(f.bounty, asOf))
+        .map((f) => ({ ratePerSecondUsdc: f.bounty.ratePerSecondUsdc!, endsAt: f.bounty.rentalEndsAt!.getTime() })),
       settings: { consentPurposes: user.consentPurposes, autoFill: user.autoFill },
       data: docs.map((d) => {
         const listing = listings.find((l) => l.documentIds.includes(d.id));
@@ -82,6 +99,8 @@ export async function GET() {
         organization: f.bounty.organization,
         purpose: f.bounty.purpose,
         rewardUsdc: f.rewardUsdc,
+        ratePerSecondUsdc: f.bounty.ratePerSecondUsdc,
+        rentalEndsAt: f.bounty.rentalEndsAt,
         txHash: f.txHash,
         createdAt: f.createdAt,
       })),

@@ -318,6 +318,11 @@ export const bounties = pgTable(
     status: bountyStatusEnum("status").notNull().default("awaiting_funding"),
     fundingTxHash: text("funding_tx_hash"),
     closesAt: timestamp("closes_at"),
+    // Rentals (KyralRentals): contributors earn per second until `rentalEndsAt`.
+    // For rentals `rewardUsdc` is the most one person can earn (rate × duration).
+    ratePerSecondUsdc: bigint("rate_per_second_usdc", { mode: "number" }),
+    rentalDurationSeconds: integer("rental_duration_seconds"),
+    rentalEndsAt: timestamp("rental_ends_at"),
     createdAt: timestamp("created_at").defaultNow().notNull(),
   },
   (table) => ({

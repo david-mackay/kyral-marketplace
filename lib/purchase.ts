@@ -13,6 +13,7 @@ import { erc20Abi, hexToSignature, type Address, type Hex } from "viem";
 import type { Config } from "wagmi";
 
 import { kyralMarketplaceAbi } from "@/lib/abi/kyral-marketplace";
+import { kyralRentalsAbi } from "@/lib/abi/kyral-rentals";
 import { testUsdcAbi } from "@/lib/abi/test-usdc";
 import { monadChain } from "@/lib/chain";
 
@@ -166,13 +167,36 @@ export interface BountyFunding {
   rewardUsdc: number;
   maxContributors: number;
   depositUsdc: string;
+  rental: { ratePerSecondUsdc: number; durationSeconds: number } | null;
   marketplaceAddress: Address;
+  rentalsAddress: Address;
   usdcAddress: Address;
 }
 
-/** Escrow a data request's full budget (rewards + protocol fee) in the marketplace. */
+/**
+ * Escrow a data request's full budget (rewards + protocol fee): in the
+ * marketplace for one-off rewards, or in KyralRentals for per-second rentals.
+ */
 export function fundBounty(config: Config, account: Address, f: BountyFunding): Promise<Hex> {
   const deposit = BigInt(f.depositUsdc);
+  if (f.rental) {
+    const rate = BigInt(f.rental.ratePerSecondUsdc);
+    const duration = BigInt(f.rental.durationSeconds);
+    const rentals = { account, address: f.rentalsAddress, abi: kyralRentalsAbi } as const;
+    return pay(config, account, {
+      token: f.usdcAddress,
+      spender: f.rentalsAddress,
+      amount: deposit,
+      withPermit: (deadline, v, r, s) =>
+        writeContract(config, {
+          ...rentals,
+          functionName: "createRentalWithPermit",
+          args: [f.bountyId, rate, duration, f.maxContributors, deposit, deadline, v, r, s],
+        }),
+      withAllowance: () =>
+        writeContract(config, { ...rentals, functionName: "createRental", args: [f.bountyId, rate, duration, f.maxContributors] }),
+    });
+  }
   const reward = BigInt(f.rewardUsdc);
   const maxFills = f.maxContributors;
   const base = { account, address: f.marketplaceAddress, abi: kyralMarketplaceAbi } as const;

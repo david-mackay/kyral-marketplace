@@ -352,6 +352,9 @@ function DataRow({ row, onChanged }: { row: EarnData["data"][number]; onChanged:
             <span className="chip text-amber-200">{row.status === "error" ? "Couldn't read this file" : "Private only"}</span>
           )}
           {row.requestsJoined > 0 && <span className="chip">In {row.requestsJoined} studies</span>}
+          <Link href={`/my-data?file=${row.id}`} className="btn-text">
+            {row.shareable ? "See what's shared" : "Why it's private"}
+          </Link>
         </div>
       </div>
       {row.listing && (

@@ -14,6 +14,7 @@ const publicLinks = [
 
 const memberLinks = [
   { href: "/earn", label: "Earn" },
+  { href: "/my-data", label: "My data" },
   ...publicLinks,
   { href: "/purchases", label: "Library" },
 ];

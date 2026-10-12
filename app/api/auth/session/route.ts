@@ -6,7 +6,7 @@ import {
   createSessionToken,
   setSessionCookie,
 } from "@/server/auth/session";
-import { verifyWalletAuthSignature } from "@/server/auth/verify-signature";
+import { SIWE_NONCE_COOKIE, verifyWalletAuthSignature } from "@/server/auth/verify-signature";
 
 export const runtime = "nodejs";
 
@@ -50,6 +50,7 @@ export async function POST(req: NextRequest) {
     }
 
     const verifiedAddress = await verifyWalletAuthSignature(
+      req,
       walletAddress,
       message,
       signature
@@ -77,6 +78,7 @@ export async function POST(req: NextRequest) {
       user: { id: dbUser.id, walletAddress: dbUser.walletAddress },
     });
     setSessionCookie(response, token);
+    response.cookies.delete({ name: SIWE_NONCE_COOKIE, path: "/api/auth" });
 
     return response;
   } catch (error) {

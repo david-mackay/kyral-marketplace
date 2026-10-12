@@ -106,7 +106,7 @@ export function useWalletAuth() {
       try {
         if (pendingSignIn?.wallet.toLowerCase() !== wallet.toLowerCase()) {
           const promise = (async () => {
-            const nonceRes = await fetch("/api/auth/nonce", { cache: "no-store" });
+            const nonceRes = await fetch(`/api/auth/nonce?address=${wallet}`, { cache: "no-store" });
             if (!nonceRes.ok) throw new Error("Failed to get auth challenge");
             const { message } = (await nonceRes.json()) as { message: string };
 

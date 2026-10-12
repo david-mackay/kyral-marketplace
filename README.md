@@ -32,6 +32,13 @@ Crypto stays in the background: amounts are shown in dollars, sign-in works with
 
 The server holds an operator key that registers catalog changes and pays relay gas. It never holds user funds.
 
+Deployed on Monad Testnet, with source verified on MonadVision:
+
+| Contract | Address |
+| --- | --- |
+| `KyralMarketplace` | [`0x2f493719da7c65602ab094A627Dc9574fa4Ce1B1`](https://testnet.monadvision.com/address/0x2f493719da7c65602ab094A627Dc9574fa4Ce1B1) |
+| `TestUSDC` | [`0x6A3BDf3907B65EF6DFd102fD32C910aC555cd79e`](https://testnet.monadvision.com/address/0x6A3BDf3907B65EF6DFd102fD32C910aC555cd79e) |
+
 ## Built during Metropolis (Sep 1 – Oct 13)
 
 The original app ran on Solana with an escrow wallet and an offchain ledger. For Metropolis:
@@ -53,7 +60,7 @@ npm install
 cp .env.example .env            # fill in DB, S3, Reown, keys
 
 # Contracts
-npm run contracts:setup         # installs forge-std + OpenZeppelin (requires Foundry)
+npm run contracts:setup         # installs forge-std (requires Foundry); OpenZeppelin comes from npm
 npm run contracts:test
 npm run contracts:deploy        # needs DEPLOYER_PRIVATE_KEY and testnet MON from https://faucet.monad.xyz
 # copy the printed addresses into NEXT_PUBLIC_MARKETPLACE_ADDRESS / NEXT_PUBLIC_USDC_ADDRESS
@@ -66,7 +73,9 @@ npm run seed:demo -- --wallet 0xYourAddress   # also give your own account data 
 npm run dev
 ```
 
-The seed runs the real pipeline: it escrows five requests from the operator wallet (topping up from the TestUSDC faucet), then uploads sample files for four personas, which get de-identified, listed, and matched onchain.
+The seed runs the real pipeline: it escrows seven requests from the operator wallet (topping up from the TestUSDC faucet), then uploads sample files for four personas, which get de-identified, listed, and matched onchain.
+
+For a live demo, upload the files in `sample-data/demo-uploads/`. They're full of fake identifiers (name, birth date, MRN, phone, email, address, clinicians, and hospitals in the notes) and mixed date formats. The migraine diary fills the migraine request; the lab export fills the thyroid and HbA1c requests.
 
 Set `OPERATOR_PRIVATE_KEY` to the operator address used at deploy time (the deployer by default), and fund it with testnet MON.
 

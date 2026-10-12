@@ -1,0 +1,15 @@
+medication,type,dose,frequency,start_date,end_date,prescribing_reason,discontinuation_reason,side_effects,side_effect_severity_1_5,overall_effectiveness_1_5,notes
+Sertraline (Zoloft),SSRI,50mg,once daily,2020-02-10,2021-08-15,generalized anxiety disorder,switched medication,nausea / reduced libido / initial insomnia,3,3,first 4 weeks difficult
+Sertraline (Zoloft),SSRI,100mg,once daily,2020-03-10,2021-08-15,dose increase,switched medication,mild nausea,2,4,better at higher dose
+Escitalopram (Lexapro),SSRI,10mg,once daily,2021-08-16,2023-04-01,switched from sertraline - better tolerability,tapered off - in remission,mild headache first week,1,5,much better tolerability
+Escitalopram (Lexapro),SSRI,5mg,once daily,2023-03-01,2023-04-30,taper dose,completed taper,none,0,5,taper successful
+Levothyroxine (Synthroid),Thyroid hormone,25mcg,once daily (morning),2021-05-20,,subclinical hypothyroidism,still taking,,0,5,taken fasted 30min before food
+Levothyroxine (Synthroid),Thyroid hormone,50mcg,once daily (morning),2022-01-10,,dose adjustment per TSH labs,,none,0,5,TSH normalized at this dose
+Melatonin,Supplement,0.5mg,nightly as needed,2020-06-01,2021-03-01,sleep onset issues during COVID lockdown,no longer needed,none,0,4,low dose more effective than 5mg
+Vitamin D3,Supplement,2000 IU,once daily,2021-09-01,,deficiency (level was 22 ng/mL),,none,0,5,level normalized to 38 by spring
+Vitamin D3,Supplement,1000 IU,once daily,2023-11-01,,maintenance dose,,none,0,5,
+Magnesium Glycinate,Supplement,400mg,nightly,2022-03-15,,sleep quality + anxiety reduction,,loose stools first week,1,4,moved to lower dose 200mg - resolved GI issue
+Magnesium Glycinate,Supplement,200mg,nightly,2022-04-01,,maintenance,,none,0,5,
+Ibuprofen (Advil),NSAID,400mg,as needed,,,pain / headaches,,mild stomach discomfort if taken without food,1,4,not taken on empty stomach
+Loratadine (Claritin),Antihistamine,10mg,as needed (spring/fall),2019-01-01,,seasonal allergies,,none,0,5,only needed March-May and Sept-Oct
+Omeprazole (Prilosec),PPI,20mg,once daily,2022-07-01,2022-10-01,acid reflux during high-stress period,resolved,none,0,4,rebounded slightly after stopping - tapered

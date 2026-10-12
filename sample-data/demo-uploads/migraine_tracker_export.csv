@@ -1,0 +1,49 @@
+Patient Name,DOB,Email,Phone,Date,Headache Severity (0-10),Migraine?,Hours of Sleep,Cycle Day,Caffeine (cups),Meds Taken,Notes
+Sarah Okafor,04/12/1988,sarah.okafor88@gmail.com,617-555-0198,3/4/2024,0,N,5.5,9,1,,
+Sarah Okafor,04/12/1988,sarah.okafor88@gmail.com,617-555-0198,2024-03-05,2,N,6.2,10,2,,
+Sarah Okafor,04/12/1988,sarah.okafor88@gmail.com,617-555-0198,"Mar 6, 2024",7,Y,6.9,11,3,sumatriptan 50mg,"Bad one at work, Kevin drove me home"
+Sarah Okafor,04/12/1988,sarah.okafor88@gmail.com,617-555-0198,3/7/2024,1,N,7.6,12,1,,
+Sarah Okafor,04/12/1988,sarah.okafor88@gmail.com,617-555-0198,2024-03-08,0,N,8.3,13,2,,
+Sarah Okafor,04/12/1988,sarah.okafor88@gmail.com,617-555-0198,"Mar 9, 2024",8,Y,6.0,14,3,sumatriptan 50mg,"Called Dr. Patel at (617) 555-0142, she upped the dose"
+Sarah Okafor,04/12/1988,sarah.okafor88@gmail.com,617-555-0198,3/10/2024,3,N,6.7,15,1,,
+Sarah Okafor,04/12/1988,sarah.okafor88@gmail.com,617-555-0198,2024-03-11,0,N,7.4,16,2,,
+Sarah Okafor,04/12/1988,sarah.okafor88@gmail.com,617-555-0198,"Mar 12, 2024",1,N,8.1,17,3,,
+Sarah Okafor,04/12/1988,sarah.okafor88@gmail.com,617-555-0198,3/13/2024,6,Y,5.8,18,1,sumatriptan 50mg,Skipped lunch + 3 coffees
+Sarah Okafor,04/12/1988,sarah.okafor88@gmail.com,617-555-0198,2024-03-14,2,N,6.5,19,2,,
+Sarah Okafor,04/12/1988,sarah.okafor88@gmail.com,617-555-0198,"Mar 15, 2024",0,N,7.2,20,3,,
+Sarah Okafor,04/12/1988,sarah.okafor88@gmail.com,617-555-0198,3/16/2024,0,N,7.9,21,1,,
+Sarah Okafor,04/12/1988,sarah.okafor88@gmail.com,617-555-0198,2024-03-17,4,N,5.6,22,2,,
+Sarah Okafor,04/12/1988,sarah.okafor88@gmail.com,617-555-0198,"Mar 18, 2024",9,Y,6.3,23,3,sumatriptan 50mg,"ER visit at Mass General, given toradol"
+Sarah Okafor,04/12/1988,sarah.okafor88@gmail.com,617-555-0198,3/19/2024,5,N,7.0,24,1,,Follow up email from sarah.okafor88@gmail.com to clinic portal
+Sarah Okafor,04/12/1988,sarah.okafor88@gmail.com,617-555-0198,2024-03-20,0,N,7.7,25,2,,
+Sarah Okafor,04/12/1988,sarah.okafor88@gmail.com,617-555-0198,"Mar 21, 2024",2,N,8.4,26,3,,
+Sarah Okafor,04/12/1988,sarah.okafor88@gmail.com,617-555-0198,3/22/2024,7,Y,6.1,27,1,sumatriptan 50mg,
+Sarah Okafor,04/12/1988,sarah.okafor88@gmail.com,617-555-0198,2024-03-23,1,N,6.8,28,2,,
+Sarah Okafor,04/12/1988,sarah.okafor88@gmail.com,617-555-0198,"Mar 24, 2024",0,N,7.5,29,3,,
+Sarah Okafor,04/12/1988,sarah.okafor88@gmail.com,617-555-0198,3/25/2024,8,Y,8.2,1,1,sumatriptan 50mg,"Period started, aura in the morning"
+Sarah Okafor,04/12/1988,sarah.okafor88@gmail.com,617-555-0198,2024-03-26,3,N,5.9,2,2,,
+Sarah Okafor,04/12/1988,sarah.okafor88@gmail.com,617-555-0198,"Mar 27, 2024",0,N,6.6,3,3,,
+Sarah Okafor,04/12/1988,sarah.okafor88@gmail.com,617-555-0198,3/28/2024,1,N,7.3,4,1,,
+Sarah Okafor,04/12/1988,sarah.okafor88@gmail.com,617-555-0198,2024-03-29,6,Y,8.0,5,2,sumatriptan 50mg,
+Sarah Okafor,04/12/1988,sarah.okafor88@gmail.com,617-555-0198,"Mar 30, 2024",2,N,5.7,6,3,,
+Sarah Okafor,04/12/1988,sarah.okafor88@gmail.com,617-555-0198,3/31/2024,0,N,6.4,7,1,,"Slept at moms place 42 Elm Street, Cambridge, MA"
+Sarah Okafor,04/12/1988,sarah.okafor88@gmail.com,617-555-0198,2024-04-01,0,N,7.1,8,2,,
+Sarah Okafor,04/12/1988,sarah.okafor88@gmail.com,617-555-0198,"Apr 2, 2024",4,N,7.8,9,3,,
+Sarah Okafor,04/12/1988,sarah.okafor88@gmail.com,617-555-0198,4/3/2024,9,Y,5.5,10,1,sumatriptan 50mg,
+Sarah Okafor,04/12/1988,sarah.okafor88@gmail.com,617-555-0198,2024-04-04,5,N,6.2,11,2,,
+Sarah Okafor,04/12/1988,sarah.okafor88@gmail.com,617-555-0198,"Apr 5, 2024",0,N,6.9,12,3,,
+Sarah Okafor,04/12/1988,sarah.okafor88@gmail.com,617-555-0198,4/6/2024,2,N,7.6,13,1,,"New pillow, felt better"
+Sarah Okafor,04/12/1988,sarah.okafor88@gmail.com,617-555-0198,2024-04-07,7,Y,8.3,14,2,sumatriptan 50mg,
+Sarah Okafor,04/12/1988,sarah.okafor88@gmail.com,617-555-0198,"Apr 8, 2024",1,N,6.0,15,3,,
+Sarah Okafor,04/12/1988,sarah.okafor88@gmail.com,617-555-0198,4/9/2024,0,N,6.7,16,1,,
+Sarah Okafor,04/12/1988,sarah.okafor88@gmail.com,617-555-0198,2024-04-10,8,Y,7.4,17,2,sumatriptan 50mg,
+Sarah Okafor,04/12/1988,sarah.okafor88@gmail.com,617-555-0198,"Apr 11, 2024",3,N,8.1,18,3,,"Neurology appt w/ Dr. Alan Brooks, MRN 00482913"
+Sarah Okafor,04/12/1988,sarah.okafor88@gmail.com,617-555-0198,4/12/2024,0,N,5.8,19,1,,
+Sarah Okafor,04/12/1988,sarah.okafor88@gmail.com,617-555-0198,2024-04-13,1,N,6.5,20,2,,
+Sarah Okafor,04/12/1988,sarah.okafor88@gmail.com,617-555-0198,"Apr 14, 2024",6,Y,7.2,21,3,sumatriptan 50mg,
+Sarah Okafor,04/12/1988,sarah.okafor88@gmail.com,617-555-0198,4/15/2024,2,N,7.9,22,1,,
+Sarah Okafor,04/12/1988,sarah.okafor88@gmail.com,617-555-0198,2024-04-16,0,N,5.6,23,2,,
+Sarah Okafor,04/12/1988,sarah.okafor88@gmail.com,617-555-0198,"Apr 17, 2024",0,N,6.3,24,3,,"Weather front came through, pressure headache"
+Sarah Okafor,04/12/1988,sarah.okafor88@gmail.com,617-555-0198,4/18/2024,4,N,7.0,25,1,,
+Sarah Okafor,04/12/1988,sarah.okafor88@gmail.com,617-555-0198,2024-04-19,9,Y,7.7,26,2,sumatriptan 50mg,
+Sarah Okafor,04/12/1988,sarah.okafor88@gmail.com,617-555-0198,"Apr 20, 2024",5,N,8.4,27,3,,

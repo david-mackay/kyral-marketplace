@@ -1,0 +1,21 @@
+Patient Name,MRN,Date of Birth,Address,Ordering Physician,Collected,Test,Result,Units,Ref Range,Comment
+"Okafor, Sarah A.",MRN-00482913,1988-04-12,"1180 Commonwealth Ave, Boston, MA 02134","Lisa Nguyen, MD",5/9/2023,TSH,5.8,mIU/L,0.45-4.5,Pt reports fatigue x3 months. Dr. Lisa Nguyen notified.
+"Okafor, Sarah A.",MRN-00482913,1988-04-12,"1180 Commonwealth Ave, Boston, MA 02134","Lisa Nguyen, MD",5/9/2023,"Vitamin D, 25-OH",18,ng/mL,30-100,
+"Okafor, Sarah A.",MRN-00482913,1988-04-12,"1180 Commonwealth Ave, Boston, MA 02134","Lisa Nguyen, MD",5/9/2023,Hemoglobin A1c,5.7,%,4.0-5.6,
+"Okafor, Sarah A.",MRN-00482913,1988-04-12,"1180 Commonwealth Ave, Boston, MA 02134","Lisa Nguyen, MD",5/9/2023,"Glucose, Fasting",104,mg/dL,70-99,
+"Okafor, Sarah A.",MRN-00482913,1988-04-12,"1180 Commonwealth Ave, Boston, MA 02134","Lisa Nguyen, MD",5/9/2023,Ferritin,12,ng/mL,15-150,
+"Okafor, Sarah A.",MRN-00482913,1988-04-12,"1180 Commonwealth Ave, Boston, MA 02134","Lisa Nguyen, MD",2023-09-19,TSH,6.4,mIU/L,0.45-4.5,Repeat ordered. Call back at 857-555-0110.
+"Okafor, Sarah A.",MRN-00482913,1988-04-12,"1180 Commonwealth Ave, Boston, MA 02134","Lisa Nguyen, MD",2023-09-19,"Vitamin D, 25-OH",22,ng/mL,30-100,
+"Okafor, Sarah A.",MRN-00482913,1988-04-12,"1180 Commonwealth Ave, Boston, MA 02134","Lisa Nguyen, MD",2023-09-19,Hemoglobin A1c,5.8,%,4.0-5.6,
+"Okafor, Sarah A.",MRN-00482913,1988-04-12,"1180 Commonwealth Ave, Boston, MA 02134","Lisa Nguyen, MD",2023-09-19,"Glucose, Fasting",108,mg/dL,70-99,
+"Okafor, Sarah A.",MRN-00482913,1988-04-12,"1180 Commonwealth Ave, Boston, MA 02134","Lisa Nguyen, MD",2023-09-19,Ferritin,16,ng/mL,15-150,
+"Okafor, Sarah A.",MRN-00482913,1988-04-12,"1180 Commonwealth Ave, Boston, MA 02134","Lisa Nguyen, MD","Jan 23, 2024",TSH,4.1,mIU/L,0.45-4.5,"Started levothyroxine 25mcg per Dr. Nguyen, Brigham and Women's Hospital"
+"Okafor, Sarah A.",MRN-00482913,1988-04-12,"1180 Commonwealth Ave, Boston, MA 02134","Lisa Nguyen, MD","Jan 23, 2024","Vitamin D, 25-OH",31,ng/mL,30-100,
+"Okafor, Sarah A.",MRN-00482913,1988-04-12,"1180 Commonwealth Ave, Boston, MA 02134","Lisa Nguyen, MD","Jan 23, 2024",Hemoglobin A1c,5.6,%,4.0-5.6,
+"Okafor, Sarah A.",MRN-00482913,1988-04-12,"1180 Commonwealth Ave, Boston, MA 02134","Lisa Nguyen, MD","Jan 23, 2024","Glucose, Fasting",97,mg/dL,70-99,
+"Okafor, Sarah A.",MRN-00482913,1988-04-12,"1180 Commonwealth Ave, Boston, MA 02134","Lisa Nguyen, MD","Jan 23, 2024",Ferritin,28,ng/mL,15-150,
+"Okafor, Sarah A.",MRN-00482913,1988-04-12,"1180 Commonwealth Ave, Boston, MA 02134","Lisa Nguyen, MD",6/4/2024,TSH,3.2,mIU/L,0.45-4.5,"Improving. Pt lives at 1180 Commonwealth Ave, Boston, MA 02134"
+"Okafor, Sarah A.",MRN-00482913,1988-04-12,"1180 Commonwealth Ave, Boston, MA 02134","Lisa Nguyen, MD",6/4/2024,"Vitamin D, 25-OH",38,ng/mL,30-100,
+"Okafor, Sarah A.",MRN-00482913,1988-04-12,"1180 Commonwealth Ave, Boston, MA 02134","Lisa Nguyen, MD",6/4/2024,Hemoglobin A1c,5.5,%,4.0-5.6,
+"Okafor, Sarah A.",MRN-00482913,1988-04-12,"1180 Commonwealth Ave, Boston, MA 02134","Lisa Nguyen, MD",6/4/2024,"Glucose, Fasting",94,mg/dL,70-99,
+"Okafor, Sarah A.",MRN-00482913,1988-04-12,"1180 Commonwealth Ave, Boston, MA 02134","Lisa Nguyen, MD",6/4/2024,Ferritin,41,ng/mL,15-150,

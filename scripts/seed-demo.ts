@@ -21,6 +21,7 @@ import type { BountyCriteria, ConsentPurpose } from "@/lib/data-profile";
 import { db } from "@/server/db";
 import { bounties, documents, users, type User } from "@/server/db/schema";
 import { processUpload } from "@/server/intake/process";
+import { fillRequestFromPool } from "@/server/matching";
 import { getOperatorClient, getPublicClient } from "@/server/monad/config";
 import { sha256Hex } from "@/server/monad/provenance";
 import { getBucketName, putObject } from "@/server/storage/s3";
@@ -81,6 +82,25 @@ const REQUESTS: {
     criteria: { categories: [], requiredSignals: ["side_effects"], minRows: 3, minSpanDays: 0 },
     reward: 20,
     maxContributors: 5,
+  },
+  // Filled live during the demo by sample-data/demo-uploads/.
+  {
+    title: "Migraine triggers: sleep, caffeine, and cycle",
+    organization: "Headache Research Consortium",
+    description: "Daily headache diaries with sleep and cycle tracking, to find which triggers precede attacks.",
+    purpose: "academic",
+    criteria: { categories: [], requiredSignals: ["headache", "sleep"], minRows: 20, minSpanDays: 30 },
+    reward: 18,
+    maxContributors: 10,
+  },
+  {
+    title: "Thyroid and vitamin D in unexplained fatigue",
+    organization: "Fatigue Research Foundation",
+    description: "Repeated TSH and vitamin D results over at least six months, to study slow-onset fatigue.",
+    purpose: "nonprofit",
+    criteria: { categories: [], requiredSignals: ["thyroid", "vitamin_d"], minRows: 8, minSpanDays: 180 },
+    reward: 14,
+    maxContributors: 10,
   },
 ];
 
@@ -181,7 +201,8 @@ async function seedRequests(researcher: User) {
     const receipt = await pub.waitForTransactionReceipt({ hash });
     if (receipt.status !== "success") throw new Error(`Funding reverted for ${p.id}`);
     await db.update(bounties).set({ status: "open", fundingTxHash: hash }).where(eq(bounties.id, p.id));
-    console.log(`  Funded request ${p.id}`);
+    const filled = await fillRequestFromPool(p.id);
+    console.log(`  Funded request ${p.id} · ${filled} filled from existing data`);
   }
 }
 

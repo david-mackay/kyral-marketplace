@@ -52,7 +52,7 @@ export async function PATCH(req: NextRequest) {
       .returning();
     if (!user) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
-    const requestsFilled = user.autoFill ? await fillRequestsForUser(id) : 0;
+    const requestsFilled = user.autoFill ? (await fillRequestsForUser(id)).length : 0;
     return NextResponse.json({ user: serialize(user), requestsFilled });
   } catch (error) {
     if (error instanceof Error && error.message === "UNAUTHENTICATED") {

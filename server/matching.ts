@@ -27,11 +27,19 @@ function eligible(bounty: Bounty, user: User) {
   return user.autoFill && bounty.creatorUserId !== user.id && user.consentPurposes.includes(bounty.purpose);
 }
 
+export interface Payout {
+  bountyId: string;
+  title: string;
+  organization: string | null;
+  rewardUsdc: number;
+  txHash: Hex;
+}
+
 /**
  * Reserve a slot, pay the contributor from escrow, and record it. Returns
- * false if the bounty filled up or this person already contributed.
+ * null if the bounty filled up or this person already contributed.
  */
-async function fill(bounty: Bounty, user: User, doc: ShareableDoc): Promise<boolean> {
+async function fill(bounty: Bounty, user: User, doc: ShareableDoc): Promise<Payout | null> {
   const [reserved] = await db
     .update(bounties)
     .set({ filledCount: sql`${bounties.filledCount} + 1` })
@@ -43,7 +51,7 @@ async function fill(bounty: Bounty, user: User, doc: ShareableDoc): Promise<bool
       )
     )
     .returning();
-  if (!reserved) return false;
+  if (!reserved) return null;
 
   const releaseSlot = () =>
     db
@@ -63,7 +71,7 @@ async function fill(bounty: Bounty, user: User, doc: ShareableDoc): Promise<bool
     .returning();
   if (!row) {
     await releaseSlot();
-    return false;
+    return null;
   }
 
   let txHash: Hex;
@@ -73,7 +81,7 @@ async function fill(bounty: Bounty, user: User, doc: ShareableDoc): Promise<bool
     console.error(`Onchain fill failed for bounty ${bounty.id}`, error);
     await db.delete(bountyFills).where(eq(bountyFills.id, row.id));
     await releaseSlot();
-    return false;
+    return null;
   }
 
   await db.update(bountyFills).set({ txHash }).where(eq(bountyFills.id, row.id));
@@ -101,7 +109,7 @@ async function fill(bounty: Bounty, user: User, doc: ShareableDoc): Promise<bool
       txHash,
     }
   );
-  return true;
+  return { bountyId: bounty.id, title: bounty.title, organization: bounty.organization, rewardUsdc: bounty.rewardUsdc, txHash };
 }
 
 async function shareableDocsFor(userId: string) {
@@ -113,9 +121,9 @@ async function shareableDocsFor(userId: string) {
 }
 
 /** After someone uploads: offer their data to every open request it fits. */
-export async function fillRequestsForUser(userId: string) {
+export async function fillRequestsForUser(userId: string): Promise<Payout[]> {
   const user = await db.query.users.findFirst({ where: eq(users.id, userId) });
-  if (!user?.autoFill) return 0;
+  if (!user?.autoFill) return [];
 
   const [docs, open, already] = await Promise.all([
     shareableDocsFor(userId),
@@ -127,13 +135,14 @@ export async function fillRequestsForUser(userId: string) {
   ]);
   const done = new Set(already.map((f) => f.bountyId));
 
-  let filled = 0;
+  const payouts: Payout[] = [];
   for (const bounty of open) {
     if (done.has(bounty.id) || !eligible(bounty, user)) continue;
     const doc = docs.find((d) => matchesCriteria(bounty.criteria, d.profile));
-    if (doc && (await fill(bounty, user, doc))) filled++;
+    const payout = doc && (await fill(bounty, user, doc));
+    if (payout) payouts.push(payout);
   }
-  return filled;
+  return payouts;
 }
 
 /** After a request is funded: fill it from everyone who has opted in. */

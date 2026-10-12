@@ -103,6 +103,7 @@ export async function POST(req: NextRequest) {
         document: { ...created, status: "error" },
         listing: null,
         requestsFilled: 0,
+        payouts: [],
       });
     }
   } catch (error) {

@@ -66,7 +66,7 @@ export async function processUpload(userId: string, doc: Document, body: Buffer)
   });
 
   if (!deidentified || !user.autoFill) {
-    return { document: updated, listing: null, requestsFilled: 0 };
+    return { document: updated, listing: null, requestsFilled: 0, payouts: [] };
   }
 
   const [listing] = await db
@@ -93,6 +93,6 @@ export async function processUpload(userId: string, doc: Document, body: Buffer)
     });
   }
 
-  const requestsFilled = await fillRequestsForUser(userId);
-  return { document: updated, listing, requestsFilled };
+  const payouts = await fillRequestsForUser(userId);
+  return { document: updated, listing, requestsFilled: payouts.length, payouts };
 }

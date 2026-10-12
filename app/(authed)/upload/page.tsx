@@ -3,8 +3,10 @@
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import { Money, formatSpan } from "@/components/ui";
+import { Money, VerifyLink, formatSpan } from "@/components/ui";
 import type { DataProfile } from "@/lib/data-profile";
+
+type Payout = { bountyId: string; title: string; organization: string | null; rewardUsdc: number; txHash: string };
 
 const STEPS = ["Reading your file", "Removing anything that identifies you", "Pricing it", "Matching it to studies"];
 
@@ -15,7 +17,7 @@ type Item = {
   step: number;
   profile?: DataProfile | null;
   listingPriceUsdc?: number | null;
-  requestsFilled?: number;
+  payouts?: Payout[];
   shareable?: boolean;
   error?: string;
 };
@@ -57,7 +59,7 @@ export default function UploadPage() {
         profile: body.document?.profile ?? null,
         shareable: !!body.document?.deidObjectKey,
         listingPriceUsdc: body.listing?.priceUsdc ?? null,
-        requestsFilled: body.requestsFilled ?? 0,
+        payouts: body.payouts ?? [],
       };
     } catch (e) {
       patch = { state: "error", error: e instanceof Error ? e.message : "Upload failed" };
@@ -82,7 +84,8 @@ export default function UploadPage() {
 
   const done = items.filter((i) => i.state === "done");
   const totalValue = done.reduce((s, i) => s + (i.listingPriceUsdc ?? 0), 0);
-  const totalStudies = done.reduce((s, i) => s + (i.requestsFilled ?? 0), 0);
+  const payouts = done.flatMap((i) => i.payouts ?? []);
+  const totalEarned = payouts.reduce((s, p) => s + p.rewardUsdc, 0);
 
   return (
     <div className="max-w-3xl mx-auto space-y-8">
@@ -140,14 +143,22 @@ export default function UploadPage() {
 
       {done.length > 0 && items.every((i) => i.state === "done" || i.state === "error") && (
         <div className="text-center space-y-4 pt-2">
-          <div className="text-zinc-400 text-sm">
-            {totalValue > 0 && (
-              <>
-                Listed for a combined <Money usdc={totalValue} className="text-zinc-100" /> per buyer
-              </>
-            )}
-            {totalStudies > 0 && <> · joined {totalStudies} paid {totalStudies === 1 ? "study" : "studies"}</>}
-          </div>
+          {totalEarned > 0 && (
+            <div>
+              <div className="eyebrow mb-2">You just earned</div>
+              <div className="num-display text-6xl text-emerald-300">
+                <Money usdc={totalEarned} />
+              </div>
+              <div className="mt-2 text-sm text-zinc-400">
+                Paid from research escrow by {payouts.length} {payouts.length === 1 ? "study" : "studies"}, ready to withdraw
+              </div>
+            </div>
+          )}
+          {totalValue > 0 && (
+            <div className="text-zinc-400 text-sm">
+              Listed for a combined <Money usdc={totalValue} className="text-zinc-100" /> per buyer
+            </div>
+          )}
           <Link href="/earn" className="btn-liquid">See your earnings</Link>
         </div>
       )}
@@ -195,12 +206,27 @@ function UploadRow({ item }: { item: Item }) {
                 <div className="text-[11px] text-zinc-500">per buyer</div>
               </>
             ) : null}
-            {item.requestsFilled ? (
-              <div className="text-[11px] text-emerald-300 mt-1">Joined {item.requestsFilled} studies</div>
-            ) : null}
           </div>
         )}
       </div>
+      {item.state === "done" && item.payouts && item.payouts.length > 0 && (
+        <ul className="mt-3 space-y-1.5">
+          {item.payouts.map((p) => (
+            <li key={p.bountyId} className="flex items-center justify-between gap-3 text-xs">
+              <span className="min-w-0 truncate text-zinc-300">
+                Joined <Link href={`/requests/${p.bountyId}`} className="text-zinc-100 hover:text-white">{p.title}</Link>
+                {p.organization && <span className="text-zinc-500"> · {p.organization}</span>}
+              </span>
+              <span className="flex items-center gap-2 shrink-0">
+                <VerifyLink txHash={p.txHash} />
+                <span className="text-emerald-300">
+                  +<Money usdc={p.rewardUsdc} />
+                </span>
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
       {item.state === "working" && (
         <div className="mt-3 h-1 rounded-full bg-white/5 overflow-hidden">
           <div

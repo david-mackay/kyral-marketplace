@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import { Money, PurposeChip, Sheet, SkeletonRows, VerifyLink, formatSpan, timeAgo } from "@/components/ui";
 import { CONSENT_PURPOSES, PURPOSE_LABELS, type ConsentPurpose, type DataProfile } from "@/lib/data-profile";
@@ -70,7 +70,7 @@ export default function EarnPage() {
 
   useEffect(() => {
     void load();
-    const interval = setInterval(() => void load(), 15_000);
+    const interval = setInterval(() => void load(), 5_000);
     return () => clearInterval(interval);
   }, [load]);
 
@@ -137,9 +137,7 @@ export default function EarnPage() {
       <section className="pt-4 pb-2">
         <div className="eyebrow mb-4">Available to withdraw</div>
         <div className="flex flex-col sm:flex-row sm:items-end gap-6 sm:gap-10">
-          <div className="num-display text-7xl sm:text-8xl lg:text-9xl">
-            <Money usdc={data.availableUsdc} />
-          </div>
+          <LiveBalance usdc={data.availableUsdc} />
           <div className="pb-2">
             <button onClick={() => void withdraw()} disabled={withdrawing || data.availableUsdc === 0} className="btn-liquid">
               {withdrawing ? "Sending…" : "Withdraw"}
@@ -289,6 +287,53 @@ export default function EarnPage() {
           </ul>
         </Sheet>
       )}
+    </div>
+  );
+}
+
+const COUNT_UP_MS = 1_200;
+
+/** The balance counts up to each new value and briefly shows what just arrived. */
+function LiveBalance({ usdc }: { usdc: number }) {
+  const [shown, setShown] = useState(usdc);
+  const [gain, setGain] = useState<number | null>(null);
+  const previous = useRef(usdc);
+
+  useEffect(() => {
+    const from = previous.current;
+    previous.current = usdc;
+    if (usdc === from) return;
+
+    let frame = 0;
+    let first = true;
+    const start = performance.now();
+    const tick = (now: number) => {
+      const t = Math.min(1, (now - start) / COUNT_UP_MS);
+      if (first) setGain(usdc > from ? usdc - from : null);
+      first = false;
+      setShown(Math.round(from + (usdc - from) * (1 - (1 - t) ** 3)));
+      if (t < 1) frame = requestAnimationFrame(tick);
+    };
+    frame = requestAnimationFrame(tick);
+    const hide = setTimeout(() => setGain(null), 6_000);
+    return () => {
+      cancelAnimationFrame(frame);
+      clearTimeout(hide);
+    };
+  }, [usdc]);
+
+  return (
+    <div>
+      <div className={`num-display text-7xl sm:text-8xl lg:text-9xl transition-colors duration-700 ${gain ? "text-emerald-300" : ""}`}>
+        <Money usdc={shown} />
+      </div>
+      <div className="h-5 mt-1 text-sm text-emerald-300" aria-live="polite">
+        {gain && (
+          <>
+            +<Money usdc={gain} /> just now
+          </>
+        )}
+      </div>
     </div>
   );
 }

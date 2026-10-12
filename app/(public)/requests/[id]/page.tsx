@@ -48,6 +48,8 @@ export default function RequestDetailPage() {
 
   useEffect(() => {
     void load();
+    const interval = setInterval(() => void load(), 5_000);
+    return () => clearInterval(interval);
   }, [load]);
 
   const close = async () => {
@@ -196,7 +198,16 @@ export default function RequestDetailPage() {
 
           {b.fundingTxHash && (
             <div className="hairline border-t pt-4 flex items-center justify-between text-[11px] text-zinc-500">
-              <span>Rewards held in escrow</span>
+              <span>
+                {b.status === "open" ? (
+                  <>
+                    <Money usdc={remaining * b.rewardUsdc} className="text-zinc-300" /> left in escrow ·{" "}
+                    <Money usdc={b.filledCount * b.rewardUsdc} className="text-emerald-300" /> paid out
+                  </>
+                ) : (
+                  "Rewards held in escrow"
+                )}
+              </span>
               <VerifyLink txHash={b.fundingTxHash} />
             </div>
           )}

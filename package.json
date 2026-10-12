@@ -9,7 +9,7 @@
     "lint": "eslint",
     "db:generate": "drizzle-kit generate",
     "db:push": "drizzle-kit push",
-    "contracts:setup": "cd contracts && forge install foundry-rs/forge-std OpenZeppelin/openzeppelin-contracts@v5.4.0 --no-git",
+    "contracts:setup": "cd contracts && forge install foundry-rs/forge-std --no-git",
     "contracts:build": "cd contracts && forge build && cd .. && node scripts/gen-abi.mjs",
     "contracts:abi": "node scripts/gen-abi.mjs",
     "contracts:test": "cd contracts && forge test -vv",
@@ -37,6 +37,7 @@
     "zod": "^3.25.76"
   },
   "devDependencies": {
+    "@openzeppelin/contracts": "5.4.0",
     "@tailwindcss/postcss": "^4",
     "@types/archiver": "^7.0.0",
     "@types/jsonwebtoken": "^9.0.10",

@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { eq, and, ilike, desc } from "drizzle-orm";
 import { z } from "zod";
 
-import { requireAuthenticatedUser, getAuthenticatedUser } from "@/server/auth/session";
+import { requireAuthenticatedUser } from "@/server/auth/session";
 import { db } from "@/server/db";
 import { dataListings, users } from "@/server/db/schema";
 import { syncItemSafe } from "@/server/monad/marketplace";

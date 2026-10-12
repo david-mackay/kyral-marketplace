@@ -85,7 +85,7 @@ export async function GET(
 
     return NextResponse.json({
       dataset: { ...dataset, dataProfile },
-      contributions: contributions.map(({ documentIds: _ids, ...c }) => c),
+      contributions: contributions.map((c) => ({ ...c, documentIds: undefined })),
     });
   } catch (error) {
     console.error("/api/datasets/[id] GET error", error);

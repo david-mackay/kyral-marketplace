@@ -5,7 +5,6 @@ import { useState, useEffect } from "react";
 const BASE_POPULATION = 8_298_978_817;
 const BASE_DATE = new Date("2026-02-24T00:00:00Z");
 const BIRTHS_PER_DAY = 15_000;
-const BIRTHS_PER_SECOND = BIRTHS_PER_DAY / (24 * 60 * 60);
 const TICK_MS = 100;
 
 function getInitialPopulation(): number {
@@ -20,15 +19,8 @@ export function GlobalPopulationCounter() {
   const [population, setPopulation] = useState<number | null>(null);
 
   useEffect(() => {
-    const initial = getInitialPopulation();
-    setPopulation(initial);
-
-    const startTime = Date.now();
-
     const interval = setInterval(() => {
-      const elapsedSeconds = (Date.now() - startTime) / 1000;
-      const current = initial + elapsedSeconds * BIRTHS_PER_SECOND;
-      setPopulation(Math.floor(current));
+      setPopulation(Math.floor(getInitialPopulation()));
     }, TICK_MS);
 
     return () => clearInterval(interval);

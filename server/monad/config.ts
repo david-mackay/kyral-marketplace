@@ -5,7 +5,9 @@ import {
   nonceManager,
   type Hex,
 } from "viem";
-import { privateKeyToAccount } from "viem/accounts";
+import { privateKeyToAccount, type LocalAccount } from "viem/accounts";
+import { PrivyClient } from "@privy-io/node";
+import { createViemAccount } from "@privy-io/node/viem";
 
 import { monadChain } from "@/lib/chain";
 
@@ -24,14 +26,33 @@ export function getPublicClient() {
 
 let cachedOperatorClient: ReturnType<typeof buildOperatorClient> | null = null;
 
-function buildOperatorClient() {
-  const privateKey = process.env.OPERATOR_PRIVATE_KEY;
-  if (!privateKey) {
-    throw new Error("OPERATOR_PRIVATE_KEY is not set");
+/**
+ * The operator is a Privy server wallet. Our key is only an additional signer
+ * bound to a policy that allows Kyral's operator calls on Monad and nothing
+ * else (no transfers, no key export); the wallet's owner key is kept offline.
+ * A raw OPERATOR_PRIVATE_KEY is still accepted for local setups without Privy.
+ */
+function operatorAccount(): LocalAccount {
+  const walletId = process.env.PRIVY_OPERATOR_WALLET_ID;
+  const address = process.env.PRIVY_OPERATOR_ADDRESS;
+  const authKey = process.env.PRIVY_OPERATOR_AUTH_KEY;
+  if (walletId && address && authKey) {
+    const privy = new PrivyClient({ appId: process.env.NEXT_PUBLIC_PRIVY_APP_ID!, appSecret: process.env.PRIVY_APP_SECRET! });
+    const account = createViemAccount(privy, {
+      walletId,
+      address: address as Hex,
+      authorizationContext: { authorization_private_keys: [authKey] },
+    });
+    // nonceManager serializes nonces across concurrent requests in this process.
+    return { ...account, nonceManager } as LocalAccount;
   }
-  // nonceManager serializes nonces across concurrent requests in this process.
-  const account = privateKeyToAccount(privateKey as Hex, { nonceManager });
-  return createWalletClient({ account, chain: monadChain, transport: transport() });
+  const privateKey = process.env.OPERATOR_PRIVATE_KEY;
+  if (!privateKey) throw new Error("Set PRIVY_OPERATOR_WALLET_ID (or OPERATOR_PRIVATE_KEY for local use)");
+  return privateKeyToAccount(privateKey as Hex, { nonceManager });
+}
+
+function buildOperatorClient() {
+  return createWalletClient({ account: operatorAccount(), chain: monadChain, transport: transport() });
 }
 
 /**

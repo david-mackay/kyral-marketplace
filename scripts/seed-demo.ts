@@ -5,31 +5,38 @@
  *   npm run seed:demo                       # demo personas only
  *   npm run seed:demo -- --wallet 0xYou     # also give your own account data
  *
- * Requests are escrowed by the operator wallet, which also acts as the demo
+ * Requests are escrowed by the deployer wallet, which also acts as the demo
  * researcher account. Safe to re-run: existing personas and requests are kept.
  */
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { and, eq } from "drizzle-orm";
-import { erc20Abi, getAddress, isAddress, keccak256, toHex } from "viem";
+import { createWalletClient, erc20Abi, getAddress, http, isAddress, keccak256, toHex, type Hex } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 
 import { testUsdcAbi } from "@/lib/abi/test-usdc";
 import { kyralMarketplaceAbi } from "@/lib/abi/kyral-marketplace";
 import { kyralRentalsAbi } from "@/lib/abi/kyral-rentals";
-import { bountyIdFor, MARKETPLACE_ADDRESS, RENTALS_ADDRESS, USDC_ADDRESS, USDC_HAS_FAUCET } from "@/lib/chain";
+import { bountyIdFor, MARKETPLACE_ADDRESS, RENTALS_ADDRESS, USDC_ADDRESS, USDC_HAS_FAUCET, monadChain } from "@/lib/chain";
 import type { BountyCriteria, ConsentPurpose } from "@/lib/data-profile";
 import { db } from "@/server/db";
 import { bounties, documents, users, type User } from "@/server/db/schema";
 import { processUpload } from "@/server/intake/process";
 import { fillRequestFromPool } from "@/server/matching";
-import { getOperatorClient, getPublicClient } from "@/server/monad/config";
+import { getPublicClient } from "@/server/monad/config";
 import { quoteRentalDeposit, verifyRentalFunding } from "@/server/monad/rentals";
 import { sha256Hex } from "@/server/monad/provenance";
 import { getBucketName, putObject } from "@/server/storage/s3";
 
 const SAMPLE_DIR = path.join(process.cwd(), "sample-data");
 const USDC = 1_000_000;
+
+// The operator is a policy-locked Privy wallet that can't move USDC, so the demo
+// researcher funds requests from the deployer key.
+function getResearcherClient() {
+  const account = privateKeyToAccount(process.env.DEPLOYER_PRIVATE_KEY as Hex);
+  return createWalletClient({ account, chain: monadChain, transport: http(process.env.MONAD_RPC_URL) });
+}
 
 const REQUESTS: {
   title: string;
@@ -126,7 +133,7 @@ async function upsertUser(walletAddress: string, values: Partial<User> = {}) {
 }
 
 async function ensureOperatorFunds(needed: bigint) {
-  const operator = getOperatorClient();
+  const operator = getResearcherClient();
   const pub = getPublicClient();
   const owner = operator.account.address;
   let balance = await pub.readContract({ address: USDC_ADDRESS, abi: erc20Abi, functionName: "balanceOf", args: [owner] });
@@ -135,7 +142,7 @@ async function ensureOperatorFunds(needed: bigint) {
   if (!USDC_HAS_FAUCET) {
     throw new Error(`Operator ${owner} has ${Number(balance) / USDC} USDC; needs ${Number(needed) / USDC}.`);
   }
-  console.log("  Topping up operator from the TestUSDC faucet…");
+  console.log("  Topping up the researcher wallet from the TestUSDC faucet…");
   const hash = await operator.writeContract({ address: USDC_ADDRESS, abi: testUsdcAbi, functionName: "faucet" });
   await pub.waitForTransactionReceipt({ hash });
   balance = await pub.readContract({ address: USDC_ADDRESS, abi: erc20Abi, functionName: "balanceOf", args: [owner] });
@@ -145,7 +152,7 @@ async function ensureOperatorFunds(needed: bigint) {
 }
 
 async function seedRequests(researcher: User) {
-  const operator = getOperatorClient();
+  const operator = getResearcherClient();
   const pub = getPublicClient();
   const contract = { address: MARKETPLACE_ADDRESS, abi: kyralMarketplaceAbi } as const;
 
@@ -229,7 +236,7 @@ async function seedRental(researcher: User) {
     console.log("  Rental already funded.");
     return;
   }
-  const operator = getOperatorClient();
+  const operator = getResearcherClient();
   const pub = getPublicClient();
   const row =
     existing ??
@@ -315,7 +322,7 @@ async function main() {
   if (ownWallet !== undefined && !isAddress(ownWallet)) throw new Error(`Invalid --wallet ${ownWallet}`);
 
   console.log("Research requests");
-  const { user: researcher } = await upsertUser(getOperatorClient().account.address, {
+  const { user: researcher } = await upsertUser(getResearcherClient().account.address, {
     displayName: "Kyral Research Desk",
     autoFill: false,
   });

@@ -3,8 +3,6 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
-import { useAppKitAccount } from "@reown/appkit/react";
-
 import { useWalletAuth } from "@/hooks/useWalletAuth";
 
 const publicLinks = [
@@ -21,12 +19,10 @@ const memberLinks = [
 
 export function Navbar() {
   const pathname = usePathname();
-  const { isAuthenticated, user, logout } = useWalletAuth();
-  const { embeddedWalletInfo } = useAppKitAccount();
+  const { isAuthenticated, user, email, logout } = useWalletAuth();
   const [menuOpen, setMenuOpen] = useState(false);
 
   const links = isAuthenticated ? memberLinks : publicLinks;
-  const email = (embeddedWalletInfo?.user as { email?: string } | undefined)?.email;
   const accountLabel =
     email ?? (user ? `Account ${user.walletAddress.slice(-4).toUpperCase()}` : "Account");
 

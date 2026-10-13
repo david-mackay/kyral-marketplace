@@ -2,9 +2,9 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { useAppKitAccount } from "@reown/appkit/react";
+import { useAccount, useConfig } from "wagmi";
 import type { Address } from "viem";
-import { useConfig } from "wagmi";
+
 
 import { UsdcFaucetButton } from "@/components/UsdcFaucetButton";
 import { Sheet } from "@/components/ui";
@@ -43,7 +43,7 @@ function friendlyError(error: unknown) {
 
 export default function NewRequestPage() {
   const router = useRouter();
-  const { address } = useAppKitAccount();
+  const { address } = useAccount();
   const wagmiConfig = useConfig();
 
   const [topic, setTopic] = useState("");

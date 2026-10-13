@@ -1,8 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { useAppKitAccount } from "@reown/appkit/react";
-import { useConfig } from "wagmi";
+import { useAccount, useConfig } from "wagmi";
+
 import { getChainId, switchChain, waitForTransactionReceipt, writeContract } from "wagmi/actions";
 import type { Address } from "viem";
 
@@ -11,7 +11,7 @@ import { monadChain, USDC_ADDRESS } from "@/lib/chain";
 
 /** Mints 1,000 TestUSDC to the connected wallet. Testnet demo only. */
 export function UsdcFaucetButton() {
-  const { address } = useAppKitAccount();
+  const { address } = useAccount();
   const config = useConfig();
   const [status, setStatus] = useState<"idle" | "pending" | "done" | "error">("idle");
   const [message, setMessage] = useState<string | null>(null);

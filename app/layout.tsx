@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
-import { AppKitProvider } from "@/context/appkit";
+import { AuthProvider } from "@/context/privy";
 import { Navbar } from "@/components/Navbar";
 import { ActivityToasts } from "@/components/ActivityToasts";
 
@@ -34,11 +34,11 @@ export default function RootLayout({
         <div className="aurora" aria-hidden>
           <span />
         </div>
-        <AppKitProvider>
+        <AuthProvider>
           <Navbar />
           <main>{children}</main>
           <ActivityToasts />
-        </AppKitProvider>
+        </AuthProvider>
       </body>
     </html>
   );

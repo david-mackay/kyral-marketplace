@@ -1,16 +1,10 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useAppKitAccount, useDisconnect } from "@reown/appkit/react";
-import { useSignMessage } from "wagmi";
-import type { Address } from "viem";
+import { usePrivy } from "@privy-io/react-auth";
+import { useAccount } from "wagmi";
 
-type AuthStatus =
-  | "checking"
-  | "unauthenticated"
-  | "authenticating"
-  | "authenticated"
-  | "error";
+type AuthStatus = "checking" | "unauthenticated" | "authenticating" | "authenticated" | "error";
 
 interface AuthUser {
   id: string;
@@ -23,243 +17,139 @@ interface AuthState {
   error?: string | null;
 }
 
-const initialState: AuthState = {
-  status: "checking",
-  user: null,
-  error: null,
-};
+// Several components mount this hook at once; they must share one session
+// exchange instead of each posting the Privy token.
+let pendingExchange: { wallet: string; promise: Promise<AuthUser> } | null = null;
 
-// Several components mount this hook at once; they must share one signature
-// prompt, or the wallet receives concurrent personal_sign requests.
-let pendingSignIn: { wallet: string; promise: Promise<AuthUser> } | null = null;
+async function fetchSession(): Promise<AuthUser | null> {
+  const res = await fetch("/api/auth/session", { cache: "no-store", credentials: "same-origin" });
+  if (!res.ok) return null;
+  const data = (await res.json()) as { authenticated: boolean; user?: AuthUser };
+  return data.authenticated && data.user ? data.user : null;
+}
 
+function exchangeSession(wallet: string, getAccessToken: () => Promise<string | null>): Promise<AuthUser> {
+  if (pendingExchange?.wallet.toLowerCase() === wallet.toLowerCase()) return pendingExchange.promise;
+  const promise = (async () => {
+    const accessToken = await getAccessToken();
+    if (!accessToken) throw new Error("Your sign-in expired. Please sign in again.");
+    const res = await fetch("/api/auth/session", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "same-origin",
+      body: JSON.stringify({ accessToken, walletAddress: wallet }),
+    });
+    const body = (await res.json().catch(() => ({}))) as { user?: AuthUser; error?: string };
+    if (!res.ok || !body.user) throw new Error(body.error ?? "Couldn't sign you in");
+    return body.user;
+  })();
+  pendingExchange = { wallet, promise };
+  void promise
+    .finally(() => {
+      if (pendingExchange?.promise === promise) pendingExchange = null;
+    })
+    .catch(() => {});
+  return promise;
+}
+
+/**
+ * Privy handles sign-in (email, Google, Apple, or an external wallet) and
+ * gives every user a wallet. We exchange the Privy access token for our own
+ * session bound to the active wallet, which is where payouts go.
+ */
 export function useWalletAuth() {
-  const { address, isConnected } = useAppKitAccount();
-  const { signMessageAsync } = useSignMessage();
-  const { disconnect: disconnectWallet } = useDisconnect();
-  const [state, setState] = useState<AuthState>(initialState);
+  const { ready, authenticated, user: privyUser, getAccessToken, login, logout: privyLogout } = usePrivy();
+  const { address } = useAccount();
+  const [state, setState] = useState<AuthState>({ status: "checking", user: null, error: null });
+  const sessionChecked = useRef(false);
+  const attemptedFor = useRef<string | null>(null);
 
-  // Refs to prevent concurrent/duplicate authenticate calls
-  const isAuthenticatingRef = useRef(false);
-  const hasAttemptedForAddressRef = useRef<string | null>(null);
-  const sessionCheckedRef = useRef(false);
-
-  // ── Check existing session on mount ──────────────────────────────
   useEffect(() => {
     let cancelled = false;
-
-    async function checkSession() {
-      try {
-        const res = await fetch("/api/auth/session", {
-          cache: "no-store",
-          credentials: "same-origin",
-        });
-
-        if (cancelled) return;
-
-        if (!res.ok) {
-          setState({ status: "unauthenticated", user: null });
-          sessionCheckedRef.current = true;
-          return;
-        }
-
-        const data = (await res.json()) as {
-          authenticated: boolean;
-          user?: AuthUser;
-        };
-
-        if (cancelled) return;
-
-        if (data.authenticated && data.user) {
-          setState({ status: "authenticated", user: data.user });
-        } else {
-          setState({ status: "unauthenticated", user: null });
-        }
-      } catch {
-        if (!cancelled) {
-          setState({
-            status: "error",
-            user: null,
-            error: "Failed to load session",
-          });
-        }
-      } finally {
-        sessionCheckedRef.current = true;
-      }
-    }
-
-    void checkSession();
+    void fetchSession()
+      .then((user) => {
+        if (!cancelled) setState(user ? { status: "authenticated", user } : { status: "unauthenticated", user: null });
+      })
+      .catch(() => {
+        if (!cancelled) setState({ status: "unauthenticated", user: null });
+      })
+      .finally(() => {
+        sessionChecked.current = true;
+      });
     return () => {
       cancelled = true;
     };
   }, []);
 
-  // ── Core authenticate function (called at most once per address) ─
-  const authenticate = useCallback(
-    async (wallet: string) => {
-      // Concurrency lock
-      if (isAuthenticatingRef.current) return;
-      isAuthenticatingRef.current = true;
-
-      setState((prev) => ({ ...prev, status: "authenticating", error: null }));
-
-      try {
-        if (pendingSignIn?.wallet.toLowerCase() !== wallet.toLowerCase()) {
-          const promise = (async () => {
-            const nonceRes = await fetch(`/api/auth/nonce?address=${wallet}`, { cache: "no-store" });
-            if (!nonceRes.ok) throw new Error("Failed to get auth challenge");
-            const { message } = (await nonceRes.json()) as { message: string };
-
-            const signature = await signMessageAsync({ account: wallet as Address, message });
-
-            const res = await fetch("/api/auth/session", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              credentials: "same-origin",
-              body: JSON.stringify({ walletAddress: wallet, message, signature }),
-            });
-            if (!res.ok) {
-              const errorBody = await res.json().catch(() => ({}));
-              throw new Error((errorBody as { error?: string }).error || "Failed to create session");
-            }
-            const data = (await res.json()) as { ok: boolean; user: AuthUser };
-            if (!data.ok || !data.user) throw new Error("Failed to create session");
-            return data.user;
-          })();
-          pendingSignIn = { wallet, promise };
-          void promise.finally(() => {
-            if (pendingSignIn?.promise === promise) pendingSignIn = null;
-          }).catch(() => {});
-        }
-        const user = await pendingSignIn!.promise;
-
-        hasAttemptedForAddressRef.current = wallet;
-        setState({ status: "authenticated", user });
-      } catch (error) {
-        console.error("Authentication failed", error);
-        setState({
-          status: "error",
-          user: null,
-          error:
-            error instanceof Error ? error.message : "Authentication failed",
-        });
-      } finally {
-        isAuthenticatingRef.current = false;
-      }
-    },
-    [signMessageAsync]
+  const exchange = useCallback(
+    (wallet: string) =>
+      exchangeSession(wallet, getAccessToken).then(
+        (user) => setState({ status: "authenticated", user }),
+        (error) =>
+          setState({ status: "error", user: null, error: error instanceof Error ? error.message : "Couldn't sign you in" })
+      ),
+    [getAccessToken]
   );
 
-  // ── React to wallet connection changes ───────────────────────────
-  // Intentionally uses minimal deps — reads latest values from refs
-  // and parameters to avoid re-trigger loops.
   useEffect(() => {
-    // Wallet disconnected
-    if (!isConnected || !address) {
-      // Only clear server session once per disconnect cycle
-      if (hasAttemptedForAddressRef.current !== null) {
-        hasAttemptedForAddressRef.current = null;
-        void fetch("/api/auth/logout", {
-          method: "POST",
-          credentials: "same-origin",
-        }).catch(() => {});
+    if (!ready || !sessionChecked.current) return;
+
+    if (!authenticated) {
+      // Signed out of Privy: our session must not outlive it.
+      if (state.status === "authenticated") {
+        void fetch("/api/auth/logout", { method: "POST", credentials: "same-origin" })
+          .catch(() => {})
+          .then(() => setState({ status: "unauthenticated", user: null }));
       }
-      setState({ status: "unauthenticated", user: null, error: null });
+      attemptedFor.current = null;
       return;
     }
 
-    // Still checking existing session — wait for that to finish first
-    if (!sessionCheckedRef.current) return;
-
-    // Already authenticated for this address
-    if (
-      state.status === "authenticated" &&
-      state.user?.walletAddress.toLowerCase() === address.toLowerCase()
-    ) {
-      hasAttemptedForAddressRef.current = address;
+    if (!address) return; // Privy is still creating or connecting the wallet.
+    if (state.status === "authenticated" && state.user?.walletAddress.toLowerCase() === address.toLowerCase()) {
+      attemptedFor.current = address;
       return;
     }
-
-    // Already attempted for this address (prevents retry loops on error)
-    if (hasAttemptedForAddressRef.current === address) return;
-
-    // Already in progress
-    if (isAuthenticatingRef.current) return;
-
-    // All conditions met: trigger a single authenticate
-    hasAttemptedForAddressRef.current = address;
-    void authenticate(address);
-  }, [isConnected, address, state.status, state.user, authenticate]);
+    if (attemptedFor.current === address) return;
+    attemptedFor.current = address;
+    void exchange(address);
+  }, [ready, authenticated, address, state.status, state.user, exchange]);
 
   const logout = useCallback(async () => {
-    hasAttemptedForAddressRef.current = null;
     setState({ status: "unauthenticated", user: null });
-
-    try {
-      // Clear server session
-      await fetch("/api/auth/logout", {
-        method: "POST",
-        credentials: "same-origin",
-      });
-    } catch (error) {
-      console.error("Failed to clear server session", error);
-    }
-
-    try {
-      // Disconnect the Reown wallet so isConnected becomes false
-      // and the connection effect doesn't re-trigger auth
-      await disconnectWallet();
-    } catch (error) {
-      console.error("Failed to disconnect wallet", error);
-    }
-
-    // Redirect to home
-    if (typeof window !== "undefined") {
-      window.location.href = "/";
-    }
-  }, [disconnectWallet]);
+    attemptedFor.current = null;
+    await fetch("/api/auth/logout", { method: "POST", credentials: "same-origin" }).catch(() => {});
+    await privyLogout().catch(() => {});
+    window.location.href = "/";
+  }, [privyLogout]);
 
   const refresh = useCallback(async () => {
-    try {
-      const res = await fetch("/api/auth/session", {
-        cache: "no-store",
-        credentials: "same-origin",
-      });
-      if (!res.ok) {
-        setState({ status: "unauthenticated", user: null });
-        return;
-      }
-      const data = (await res.json()) as {
-        authenticated: boolean;
-        user?: AuthUser;
-      };
-      if (data.authenticated && data.user) {
-        setState({ status: "authenticated", user: data.user });
-      } else {
-        setState({ status: "unauthenticated", user: null });
-      }
-    } catch {
-      setState({ status: "unauthenticated", user: null });
-    }
+    const user = await fetchSession().catch(() => null);
+    setState(user ? { status: "authenticated", user } : { status: "unauthenticated", user: null });
   }, []);
 
-  // Allow manual retry after error
-  const retryAuth = useCallback(() => {
-    if (!isConnected || !address) return;
-    hasAttemptedForAddressRef.current = null;
-    void authenticate(address);
-  }, [isConnected, address, authenticate]);
+  const retry = useCallback(() => {
+    if (!address) return login();
+    attemptedFor.current = address;
+    setState({ status: "authenticating", user: null, error: null });
+    void exchange(address);
+  }, [address, exchange, login]);
+
+  const signingIn = ready && authenticated && state.status !== "authenticated" && state.status !== "error";
+  const email = privyUser?.email?.address ?? privyUser?.google?.email ?? privyUser?.apple?.email ?? null;
 
   return useMemo(
     () => ({
-      status: state.status,
+      status: signingIn ? ("authenticating" as const) : state.status,
       user: state.user,
       error: state.error,
+      email,
       isAuthenticated: state.status === "authenticated",
-      authenticate: retryAuth,
+      login,
+      authenticate: retry,
       logout,
       refresh,
     }),
-    [state, retryAuth, logout, refresh]
+    [state, signingIn, email, login, retry, logout, refresh]
   );
 }

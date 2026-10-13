@@ -3,9 +3,9 @@
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
-import { useAppKitAccount } from "@reown/appkit/react";
+import { useAccount, useConfig } from "wagmi";
 import type { Address } from "viem";
-import { useConfig } from "wagmi";
+
 
 import { UsdcFaucetButton } from "@/components/UsdcFaucetButton";
 import { Money, Sheet, SkeletonRows, VerifyLink, formatSpan } from "@/components/ui";
@@ -67,7 +67,7 @@ export default function MarketplaceDetailPage() {
   const id = useParams().id as string;
   const type = useSearchParams().get("type") === "dataset" ? "dataset" : "listing";
   const { user, isAuthenticated } = useWalletAuth();
-  const { address, isConnected } = useAppKitAccount();
+  const { address, isConnected } = useAccount();
   const wagmiConfig = useConfig();
 
   const [data, setData] = useState<Detail | null>(null);

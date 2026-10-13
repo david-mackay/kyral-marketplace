@@ -2,8 +2,6 @@
 
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { useAppKit } from "@reown/appkit/react";
-
 import { useWalletAuth } from "@/hooks/useWalletAuth";
 
 function nextPath() {
@@ -13,8 +11,7 @@ function nextPath() {
 
 export default function AuthPage() {
   const router = useRouter();
-  const { open } = useAppKit();
-  const { status, isAuthenticated, error, authenticate } = useWalletAuth();
+  const { status, isAuthenticated, error, authenticate, login } = useWalletAuth();
 
   useEffect(() => {
     if (isAuthenticated) router.replace(nextPath());
@@ -34,13 +31,15 @@ export default function AuthPage() {
           {busy ? (
             <div className="py-3 text-sm text-zinc-300">
               {status === "checking" && "Checking your session…"}
-              {status === "authenticating" && "Approve the sign-in request to continue."}
+              {status === "authenticating" && "Setting up your account…"}
               {status === "authenticated" && "Signed in. One moment…"}
             </div>
           ) : (
             <>
-              <button onClick={() => void open()} className="btn-liquid w-full">Continue with email or Google</button>
-              <button onClick={() => void open({ view: "Connect" })} className="btn-ghost w-full">I have a crypto wallet</button>
+              <button onClick={() => login({ loginMethods: ["email", "google", "apple"] })} className="btn-liquid w-full">
+                Continue with email or Google
+              </button>
+              <button onClick={() => login({ loginMethods: ["wallet"] })} className="btn-ghost w-full">I have a crypto wallet</button>
             </>
           )}
           {error && (

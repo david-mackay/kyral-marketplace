@@ -51,7 +51,7 @@ Deployed on Monad Testnet, with source verified on MonadVision:
 
 The original app ran on Solana with an escrow wallet and an offchain ledger. For Metropolis:
 
-- Ported wallet sign-in to EVM (EIP-191, with ERC-1271/6492 smart-account support for email and social login via Reown).
+- Replaced Solana wallet sign-in with Privy: email, Google, Apple, or any EVM wallet. Patients get a self-custodial embedded wallet on Monad without seeing it; the server verifies the Privy access token and checks the wallet is linked to that user before issuing a session.
 - Wrote `KyralMarketplace` and `TestUSDC`, with a Foundry test suite.
 - Replaced the escrow wallet with contract settlement. The server now verifies the `Purchased` event for the exact order, item, and buyer, and mirrors `RevenueCredited` into earnings history.
 - Added file hashing on upload, onchain anchoring of listings and datasets, and a provenance panel linking to MonadVision.
@@ -66,13 +66,14 @@ The original app ran on Solana with an escrow wallet and an offchain ledger. For
 
 ```bash
 npm install
-cp .env.example .env            # fill in DB, S3, Reown, keys
+cp .env.example .env            # fill in DB, S3, Privy, keys
 
 # Contracts
 npm run contracts:setup         # installs forge-std (requires Foundry); OpenZeppelin comes from npm
 npm run contracts:test
 npm run contracts:deploy        # needs DEPLOYER_PRIVATE_KEY and testnet MON from https://faucet.monad.xyz
 # copy the printed addresses into NEXT_PUBLIC_MARKETPLACE_ADDRESS / NEXT_PUBLIC_USDC_ADDRESS
+USDC_ADDRESS=0x... npm run contracts:deploy:rentals   # then set NEXT_PUBLIC_RENTALS_ADDRESS
 npm run contracts:abi           # regenerate lib/abi after contract changes
 
 # App

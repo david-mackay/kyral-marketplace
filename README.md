@@ -37,7 +37,13 @@ Crypto stays in the background: amounts are shown in dollars, sign-in works with
 - **Access window.** `hasAccess(rentalId)` is true only while the rental runs. Downloads of rented data are refused once it ends.
 - **Same relayed payouts.** `claimFor(rentalIds, account)` sends a contributor's streamed earnings to their own wallet. A single withdrawal in the app claims sales, rewards, and rentals.
 
-The server holds an operator key that registers catalog changes and pays relay gas. It never holds user funds.
+The server's operator registers catalog changes, seats contributors, and pays relay gas. It never holds user funds, and it isn't a raw private key: it's a [Privy server wallet](https://docs.privy.io/controls/policies/overview) (`0xa94577E0D4b7aBC61Fa57eE554e1aD1a80090E18`) where the server is only an additional signer bound to a policy:
+
+- **Allowed:** `upsertItem`, `setItemActive`, `fillBounty`, `closeBounty`, `claimFor` on `KyralMarketplace`, and `joinRental`, `stopRental`, `settleRental`, `claimFor` on `KyralRentals`, on Monad testnet only.
+- **Denied:** everything else, including USDC transfers, sending MON, owner functions like `setOperator`, and exporting the key.
+- **Can't be loosened from the server.** The wallet and policy are owned by an admin key quorum whose key never leaves the developer's machine. The server key and the Privy app secret are both rejected when they try to remove or rewrite the policy.
+
+`scripts/setup-privy-operator.ts` creates the keys, policy and wallet, funds gas, and with `--switch` points both contracts' `operator` at it.
 
 Deployed on Monad Testnet, with source verified on MonadVision:
 
@@ -59,6 +65,7 @@ The original app ran on Solana with an escrow wallet and an offchain ledger. For
 - Added a testnet USDC faucet in the UI.
 - Added escrowed data requests (bounties) with consent-scoped auto-matching.
 - Added `KyralRentals`: requests can rent data by the second, with balances that tick up live on the Earn page.
+- Moved the operator to a policy-locked Privy server wallet, so the server holds no key that can move funds.
 - Added the intake agent: file understanding, de-identification, pricing, and auto-listing.
 - Redesigned the app around patients (big earnings, activity feed, consent) and researchers (requests), with dollars instead of tokens.
 

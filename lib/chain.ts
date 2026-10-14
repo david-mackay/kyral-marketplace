@@ -8,8 +8,8 @@ export const EXPLORER_URL =
 
 export const monadChain = defineChain({
   id: 10_143,
-  name: "Monad Testnet",
-  nativeCurrency: { name: "Testnet MON", symbol: "MON", decimals: 18 },
+  name: "Monad",
+  nativeCurrency: { name: "MON", symbol: "MON", decimals: 18 },
   rpcUrls: { default: { http: [rpcUrl] } },
   blockExplorers: { default: { name: "MonadVision", url: EXPLORER_URL } },
   contracts: {
